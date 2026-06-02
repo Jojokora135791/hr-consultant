@@ -1,21 +1,18 @@
-# Настройка workflow в n8n
+# Настройка workflow в n8n (v2 — AI Agent)
 
 > Подробная архитектура и порядок зависимостей — в [ARCHITECTURE.md](ARCHITECTURE.md).
 
 ---
 
-## 1. Создать Credential: PostgreSQL
+## 1. Создать Credential: Ollama API
 
-Открой n8n → Settings → Credentials → Add credential → PostgreSQL
+Открой n8n → Settings → Credentials → Add credential → Ollama API
 
 | Поле | Значение |
 |------|----------|
-| Host | localhost |
-| Port | 5432 |
-| Database | hr_assistant |
-| User | olegkluev |
-| Password | (пусто) |
-| SSL | отключён |
+| Base URL | http://127.0.0.1:11434 |
+
+> ⚠️ Используй именно `127.0.0.1`, а не `localhost` — macOS резолвит `localhost` в IPv6 (`::1`), Ollama слушает только IPv4.
 
 Сохрани. Запомни **ID** (виден в URL: `/credentials/XXXX`).
 
@@ -23,51 +20,33 @@
 
 ## 2. Импортировать workflow
 
-### Вариант А — автоматически (рекомендуется)
+### Вариант А — автоматически
 
 ```bash
-cd n8n/workflows
-bash setup/install.sh
+cd ~/Documents/Projects/hr-consultant
+./start.sh import
 ```
-
-Скрипт импортирует все workflow через n8n API, автоматически подставляя реальные ID sub-workflow вместо плейсхолдеров `REPLACE_WITH_*`.
-
-> ⚠️ После автоимпорта всё равно нужно вручную указать credential в postgres-нодах (см. шаг 3).
 
 ### Вариант Б — вручную
 
 Импортировать строго в таком порядке:
 
 1. `lib/lib_rag_context.json`
-2. `lib/lib_llm_call.json`
-3. `lib/lib_session.json`
-4. `lib/lib_check_dates.json`
-5. `lib/lib_build_sz.json`
-6. `scenarios/sc1_progul_ochny.json`
-7. `00_router.json` — последним
+2. `lib/lib_check_dates.json`
+3. `lib/lib_build_sz.json`
+4. `lib/lib_final_pack.json`
+5. `scenarios/sc1_progul_ochny.json` — и остальные sc2–sc8
+6. `00_main_agent.json` — **последним**
 
 Для каждого: n8n → Workflows → иконка импорта (↑) → Import from file.
 
-После импорта вручную нужно заменить плейсхолдеры `REPLACE_WITH_*` в нодах "Execute Workflow" на реальные ID (видны в URL открытого workflow).
+> Файлы `archive/` импортировать **не нужно** — они устарели.
 
 ---
 
-## 3. Подключить credential к PostgreSQL-нодам
+## 3. Подключить credential к Ollama-ноду
 
-После импорта у postgres-нодов будет ошибка (credential `REPLACE_ME` не найден). Зайди в каждый из перечисленных нодов и выбери созданный credential.
-
-**lib_session.json:**
-- `PostgreSQL: создать сессию (если новая)`
-- `PostgreSQL: загрузить state, context и историю`
-
-**lib_check_dates.json:**
-- `PostgreSQL: проверить сроки по ТК РФ ст.193`
-
-**sc1_progul_ochny.json:**
-- `СТАРТ: PostgreSQL — сохранить, state → CHECK_DATES`
-- `ПРОСРОЧЕНО: PostgreSQL — сохранить, state → EXPIRED`
-- `ДАТЫ (OK): PostgreSQL — сохранить, state → INCIDENT_TYPE`
-- `ДАТЫ (ждём): PostgreSQL — сохранить, остаться`
+После импорта `00_main_agent.json` открой его → найди ноду **"Ollama qwen2.5:7b"** → замени credential `REPLACE_ME_OLLAMA` на созданный на шаге 1.
 
 ---
 
@@ -79,6 +58,7 @@ ollama list
 ```
 
 Если модели нет:
+
 ```bash
 ollama pull qwen2.5:7b
 ```
@@ -87,23 +67,37 @@ ollama pull qwen2.5:7b
 
 ## 5. Тест
 
-1. Открой `00: HR-ассистент — точка входа` → нажми **Test Workflow**
+1. Открой `HR-ассистент (AI Agent)` → нажми **Test Workflow**
 2. В чате напиши: `"Здравствуйте, у меня сотрудник не пришёл на работу"`
-3. Ассистент должен поздороваться и спросить даты нарушения
+3. Ассистент должен поздороваться и попросить описать ситуацию
+4. После указания дат — должен автоматически вызвать `check_dates`
 
 ---
 
 ## Текущий статус реализации
 
-| State | Статус |
-|-------|--------|
-| `START` | ✅ Реализован |
-| `CHECK_DATES` | ✅ Реализован (с проверкой сроков ТК ст.193) |
-| `EXPIRED` | ✅ Реализован (переход из CHECK_DATES) |
-| `INCIDENT_TYPE` | ⏳ TODO |
-| `SUBTYPE` | ⏳ TODO |
-| `VALIDATE_ABSENCE` | ⏳ TODO |
-| `BUILD_ACT` | ⏳ TODO |
-| `CHECK_ONGOING` | ⏳ TODO |
-| `BUILD_SZ` | ⏳ Заглушка (lib_build_sz.json создан) |
-| `DONE` | ⏳ TODO |
+| Компонент | Статус |
+|-----------|--------|
+| AI Agent (главный диалог) | ✅ Реализован |
+| Tool: check_dates | ✅ Реализован |
+| Tool: get_rag_context | ✅ Реализован (заглушка) |
+| sc1: генерация акта (BUILD_ACT) | 🔄 Требует доработки под v2 |
+| sc1: генерация СЗ (BUILD_SZ) | 🔄 Требует доработки под v2 |
+| sc2–sc8 | ⏳ Заглушки |
+
+---
+
+## Если нужен PostgreSQL (опционально)
+
+PostgreSQL создана и доступна, но активно не используется в v2 (сессии хранятся в памяти агента).
+
+Если понадобится персистентная память — заменить `Window Buffer Memory` на `PostgreSQL Chat Memory`:
+
+| Поле | Значение |
+|------|----------|
+| Host | localhost |
+| Port | 5432 |
+| Database | hr_assistant |
+| User | olegkluev |
+| Password | (пусто) |
+| SSL | отключён |

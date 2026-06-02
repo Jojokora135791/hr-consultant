@@ -2,39 +2,38 @@
 
 ## Что это
 
-ИИ-ассистент для руководителей Контура по оформлению дисциплинарных документов (служебные записки, акты). Реализуется на **n8n** + **Ollama** (локально). Статус: Discovery / активная разработка.
+ИИ-ассистент для руководителей Контура по оформлению дисциплинарных документов (служебные записки, акты). Реализуется на **n8n** + **Ollama** (локально). Статус: активная разработка, архитектура v2.
 
 ## Технический стек
 
 | Компонент | Решение | Статус |
 |-----------|---------|--------|
 | Оркестрация | n8n @ localhost:5678 (npm, SQLite) | ✅ Запущен |
-| LLM | Ollama — qwen2.5:7b | ✅ Скачана (~4.7 GB) |
+| LLM | Ollama — qwen2.5:7b @ 127.0.0.1:11434 | ✅ Скачана (~4.7 GB) |
 | Embedding-модель | Ollama — nomic-embed-text:latest | ✅ Есть |
-| Векторная БД | TBD | — |
-| Стейт сессий | PostgreSQL 16 — БД hr_assistant | ✅ Создана |
+| Векторная БД | TBD (заглушка с текстами ТК РФ) | ⚠️ Открытый вопрос |
+| Стейт сессий | Window Buffer Memory в n8n агенте (in-memory) | ✅ v2 |
+| PostgreSQL 16 | hr_assistant (зарезервирована, не используется активно) | ✅ Создана |
 | Источник НПА (ТК РФ) | TBD: Контур.Норматив / КонсультантПлюс / Гарант | ⚠️ Открытый вопрос |
 | Источник ЛНА | RAG-AAS ЦИИ (пилот с КД, июль 2026) | Планируется |
 | Интерфейс | n8n встроенный чат (тест) → Telegram / IP TBD | 🧪 Тест в чате n8n |
+| GitHub | https://github.com/Jojokora135791/hr-consultant | ✅ Публичный |
 
-### PostgreSQL hr_assistant
-- `sessions` — state machine: `session_id`, `state`, `context (JSONB)`, timestamps
-- `messages` — история диалога для LLM: `session_id`, `role`, `content`
-- Подключение: `host=localhost port=5432 dbname=hr_assistant user=olegkluev`
+## Архитектура v2 — AI Agent
 
-### State machine — состояния
-| State | Описание |
-|-------|----------|
-| `START` | Инициация |
-| `CHECK_DATES` | Проверка сроков |
-| `INCIDENT_TYPE` | Определение типа инцидента |
-| `SUBTYPE` | Офисник или дистант |
-| `VALIDATE_ABSENCE` | Валидация факта + доказательства |
-| `BUILD_ACT` | Составление акта |
-| `CHECK_ONGOING` | Прогул продолжается? |
-| `BUILD_SZ` | Составление служебной записки |
-| `DONE` | Завершено |
-| `EXPIRED` | Срок вышел — консультация |
+Вместо жёсткой state machine используется **LangChain AI Agent** в n8n:
+
+```
+Chat Trigger
+    ↓
+AI Agent (qwen2.5:7b)
+    ├── Tool: check_dates    → lib_check_dates.json
+    └── Tool: get_rag_context → lib_rag_context.json
+    ↓ (когда фактура собрана)
+Сценарий sc1–sc8 (генерация документов)
+```
+
+Агент сам управляет диалогом — спрашивает даты, проверяет сроки, определяет тип нарушения.
 
 ## Структура проекта
 
@@ -47,34 +46,38 @@ hr-consultant/
 │   └── project_architecture.md
 ├── ТЗ БП/
 │   ├── ФЛОУ.png
-│   ├── blueprint_progul_ofisnik.md  # Blueprint сц.1 (Прогул, офисник)
-│   └── UIT-*.pdf                    # Паспорт проекта
+│   ├── blueprint_progul_ofisnik.md   # Blueprint сц.1 (бизнес-процесс)
+│   └── UIT-*.pdf                     # Паспорт проекта
 └── n8n/
     ├── prompts/
-    │   └── system_prompts.md        # Все системные промпты по state
+    │   └── system_prompts.md         # Системные промпты (документация)
     ├── sql/
-    │   └── queries.sql              # SQL-запросы для state machine
+    │   └── queries.sql               # SQL-запросы (резерв)
     └── workflows/
-        ├── ARCHITECTURE.md          # Описание архитектуры и порядок импорта
-        ├── SETUP.md                 # Инструкция по настройке
-        ├── 00_router.json           # ← Точка входа (импортировать последним)
+        ├── ARCHITECTURE.md           # Описание архитектуры v2
+        ├── SETUP.md                  # Инструкция по настройке
+        ├── 00_main_agent.json        # ← Точка входа (AI Agent)
         ├── lib/
-        │   ├── lib_session.json     # Создать/загрузить сессию PG
-        │   ├── lib_llm_call.json    # Вызов Ollama + RAG-слот
-        │   ├── lib_rag_context.json # RAG (заглушка → позже Qdrant)
-        │   ├── lib_check_dates.json # Проверка сроков ТК ст.193
-        │   └── lib_build_sz.json    # Составить служебную записку
+        │   ├── lib_rag_context.json  # RAG-заглушка (инструмент агента)
+        │   ├── lib_check_dates.json  # Проверка сроков ТК ст.193 (инструмент агента)
+        │   ├── lib_build_sz.json     # Составить служебную записку
+        │   └── lib_final_pack.json   # Финальный пакет
         ├── scenarios/
-        │   └── sc1_progul_ochny.json # Сц.1: Прогул офисник (✅ START+CHECK_DATES+EXPIRED)
+        │   ├── sc1_progul_ochny.json # Сц.1: Прогул офисник (🔄 требует доработки под v2)
+        │   └── sc2–sc8 (заглушки)
+        ├── archive/
+        │   ├── 00_router_v1.json     # Устарел (заменён AI Agent)
+        │   ├── lib_session_v1.json   # Устарел (сессии в памяти агента)
+        │   └── lib_llm_call_v1.json  # Устарел (LLM вызывает агент нативно)
         └── setup/
-            └── install.sh           # Скрипт авто-импорта всех workflow в n8n
+            └── install.sh            # Скрипт импорта workflow в n8n
 ```
 
 ## Сценарии
 
 | # | Ключ | Название | Статус |
-| --- | --- | --- | --- |
-| 1 | `progul_ochny` | Прогул, очный (офисник) | ✅ START, CHECK_DATES, EXPIRED |
+|---|------|----------|--------|
+| 1 | `progul_ochny` | Прогул, очный (офисник) | 🔄 Требует доработки под v2 |
 | 2 | `progul_distant` | Прогул, дистанционный | ⏳ Заглушка |
 | 3 | `progul_unclear` | Прогул, неопределённый формат | ⏳ Заглушка |
 | 4 | `ndo` | Ненадлежащее исполнение ДО | ⏳ Заглушка |
@@ -83,22 +86,19 @@ hr-consultant/
 | 7 | `ispytanie` | Испытательный срок (неудача) | ⏳ Заглушка |
 | 8 | `ib_kt` | Нарушение КТ / ИБ | ⏳ Заглушка (→ юр.служба) |
 
-Общие этапы (START, CHECK_DATES, INCIDENT_TYPE, BUILD_SZ, DONE, EXPIRED) — реализованы один раз в lib/ и сценариях, переиспользуются.
-
 ## Следующие шаги
 
-1. **Импортировать workflow** — запустить `n8n/workflows/setup/install.sh`
-   (или вручную по порядку из ARCHITECTURE.md)
-2. **Создать credential** в n8n: PostgreSQL → hr_assistant
-3. **Заменить REPLACE_ME** в Postgres-нодах на ID созданного credential
-4. **Протестировать** START + CHECK_DATES в чате n8n
-5. **Реализовать INCIDENT_TYPE** — LLM классифицирует описание → определяет сценарий
+1. **Настроить credential Ollama API** в n8n → Base URL: `http://127.0.0.1:11434`
+2. **Импортировать workflow** по порядку из `SETUP.md` (без lib_session и lib_llm_call — они в archive)
+3. **Заменить REPLACE_ME_OLLAMA** в ноде "Ollama qwen2.5:7b" на ID созданного credential
+4. **Протестировать** AI Agent в чате n8n
+5. **Переработать sc1** — принять контекст от агента и генерировать документы (BUILD_ACT + BUILD_SZ)
 6. **Получить шаблоны документов** (DS-03, DS-04) от Черепановой/Касмыниной
 
 ## Ключевые ограничения ассистента
 
 - Никогда ничего не додумывает — только факты от руководителя
-- Граница: до требования об объяснении включительно. Дальше — эксперт
+- Граница: до передачи пакета документов эксперту включительно. Дальше — эксперт
 - Если ситуация не под сценарий → направить к Касмыниной О. или Черепановой Т.
 - Если нарушение связано с ИБ / коммерческой тайной → юр. служба / ОИБО
 
@@ -115,5 +115,7 @@ hr-consultant/
 
 - Паспорт проекта: `ТЗ БП/UIT-*.pdf`
 - Флоу верхнеуровневый: `ТЗ БП/ФЛОУ.png`
-- Блюпринт сц. 1: `ТЗ БП/blueprint_progul_ofisnik.md`
-- Контекст и архитектура: `memory/`
+- Блюпринт сц. 1 (бизнес): `ТЗ БП/blueprint_progul_ofisnik.md`
+- Архитектура n8n: `n8n/workflows/ARCHITECTURE.md`
+- Контекст проекта: `memory/`
+- GitHub: https://github.com/Jojokora135791/hr-consultant

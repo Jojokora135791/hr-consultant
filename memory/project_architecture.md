@@ -1,6 +1,6 @@
 ---
 name: project-architecture
-description: "Архитектура n8n workflow, инфраструктура, команды запуска и открытые вопросы HR-ассистента"
+description: "Архитектура n8n workflow v2 (AI Agent), инфраструктура, команды запуска и открытые вопросы HR-ассистента"
 metadata:
   type: project
 ---
@@ -29,34 +29,44 @@ cd ~/Documents/Projects/hr-consultant && ./start.sh
 
 ## Подключения
 
-- **PostgreSQL:** `host=localhost port=5432 dbname=hr_assistant user=olegkluev` (без пароля)
-- **Ollama:** `http://localhost:11434`
+- **Ollama:** `http://127.0.0.1:11434` (не localhost — macOS резолвит в IPv6 ::1, Ollama слушает только IPv4)
+- **PostgreSQL:** `host=localhost port=5432 dbname=hr_assistant user=olegkluev` (без пароля, зарезервирована)
 - **n8n:** `http://localhost:5678`
+- **GitHub:** https://github.com/Jojokora135791/hr-consultant
 
 ---
 
-## Архитектура workflow (n8n)
+## Архитектура v2 — AI Agent (текущая)
 
-**Принцип:** один workflow = одна ответственность. Sub-workflows через `Execute Workflow`.
+**Принцип:** один LangChain AI Agent управляет диалогом. Инструменты вызываются по необходимости.
 
 ```
-00_router.json (точка входа, Chat Trigger)
+00_main_agent.json (точка входа, Chat Trigger)
     ↓
-lib_session.json      → создать/загрузить сессию из PG
-lib_llm_call.json     → вызов Ollama + инъекция RAG-контекста
-lib_rag_context.json  → RAG-заглушка (статичный ТК РФ → позже Qdrant)
-lib_check_dates.json  → проверка сроков ТК ст.193
-lib_build_sz.json     → составить служебную записку
+AI Agent (qwen2.5:7b через Ollama)
+    ├── Tool: check_dates     → lib_check_dates.json (проверка сроков ТК ст.193)
+    └── Tool: get_rag_context → lib_rag_context.json (выдержки из НПА)
+    ↓ (когда фактура собрана и тип определён)
+scenarios/sc1–sc8 (генерация документов)
     ↓
-scenarios/sc1_progul_ochny.json  → Сц.1: Прогул офисник
+lib_build_sz.json / lib_final_pack.json
 ```
 
-**Импорт в n8n:** `./start.sh import` или по одному через `n8n import:workflow --input=file.json`.
-ID-шники зашиты в JSON (формат `HR-LIB-*-01`), поэтому повторный импорт безопасен.
+**Что изменилось от v1:**
+- Нет state machine (START → CHECK_DATES → ...) — агент сам решает что спрашивать
+- Нет PostgreSQL для сессий — используется Window Buffer Memory (20 сообщений, in-memory)
+- Нет lib_session и lib_llm_call — перенесены в archive/
+- Точка входа: `00_main_agent.json` вместо `00_router.json`
 
-**Credential:** после импорта создать в n8n → Settings → Credentials → PostgreSQL:
-- name: `hr_assistant PostgreSQL`
-- host/port/db/user из таблицы выше
+**Импорт в n8n:**
+```bash
+./start.sh import
+```
+или вручную по порядку из SETUP.md.
+
+**Credential после импорта:** создать в n8n → Settings → Credentials → Ollama API:
+- Base URL: `http://127.0.0.1:11434`
+- Заменить `REPLACE_ME_OLLAMA` в ноде "Ollama qwen2.5:7b"
 
 ---
 
@@ -64,23 +74,23 @@ ID-шники зашиты в JSON (формат `HR-LIB-*-01`), поэтому 
 
 | Ключ | Файл | Статус |
 |------|------|--------|
-| `progul_ochny` | sc1_progul_ochny.json | ✅ START + CHECK_DATES + EXPIRED |
-| `progul_distant` | sc2 (нет) | ⏳ TODO |
-| `progul_unclear` | sc3 (нет) | ⏳ TODO |
-| `ndo` | sc4 (нет) | ⏳ TODO |
-| `etika` | sc5 (нет) | ⏳ TODO |
-| `opyanenie` | sc6 (нет) | ⏳ TODO |
-| `ispytanie` | sc7 (нет) | ⏳ TODO |
-| `ib_kt` | sc8 (нет) | ⏳ TODO → юр.служба |
-
-**State machine:** `START → CHECK_DATES → INCIDENT_TYPE → SUBTYPE → VALIDATE_ABSENCE → BUILD_ACT → CHECK_ONGOING → BUILD_SZ → DONE` (+ `EXPIRED`)
+| `progul_ochny` | sc1_progul_ochny.json | 🔄 Требует доработки под v2 |
+| `progul_distant` | sc2_progul_distant.json | ⏳ Заглушка |
+| `progul_unclear` | sc3_progul_unclear.json | ⏳ Заглушка |
+| `ndo` | sc4_ndo.json | ⏳ Заглушка |
+| `etika` | sc5_etika.json | ⏳ Заглушка |
+| `opyanenie` | sc6_opyanenie.json | ⏳ Заглушка |
+| `ispytanie` | sc7_ispytanie.json | ⏳ Заглушка |
+| `ib_kt` | sc8_ib_kt.json | ⏳ Заглушка → юр.служба |
 
 ---
 
 ## RAG-слот
 
-`lib_rag_context.json` — Switch по `topic`, возвращает выдержки из ТК РФ.
-Сейчас захардкожен. Заменить: открыть lib_rag_context, добавить Qdrant-нод вместо Code-нод.
+`lib_rag_context.json` — Switch по `rag_topic`, возвращает `context` — выдержки из НПА.
+Вызывается агентом как Tool. Сейчас захардкожен.
+
+Заменить: открыть lib_rag_context, добавить Qdrant-нод или HTTP Request к Контур.Норматив вместо Code-нод.
 
 Topics: `check_dates | progul | ndo | opyanenie | ispytanie | ib_kt | etika | sz_structure`
 
@@ -88,12 +98,11 @@ Topics: `check_dates | progul | ndo | opyanenie | ispytanie | ib_kt | etika | sz
 
 ## Следующие шаги (очерёдность)
 
-1. Создать credential PostgreSQL в n8n
-2. Протестировать `START → CHECK_DATES` в чате n8n (qwen2.5:7b уже скачана)
-3. Реализовать `INCIDENT_TYPE` — LLM классифицирует описание руководителя → определяет сценарий (ключ из таблицы выше)
-4. Реализовать `SUBTYPE`, `VALIDATE_ABSENCE`, `BUILD_ACT`, `CHECK_ONGOING` для sc1
-5. Получить шаблоны документов (DS-03 акт, DS-04 СЗ) от Черепановой/Касмыниной
-6. Реализовать sc2 (прогул дистант) — большая часть кода sc1 переиспользуется
+1. Настроить credential Ollama API в n8n, протестировать AI Agent в чате
+2. Переработать sc1 — принимать контекст от агента, генерировать акт и СЗ
+3. Получить шаблоны документов (DS-03 акт, DS-04 СЗ) от Черепановой/Касмыниной
+4. Реализовать sc2 (прогул дистант)
+5. Подключить реальный RAG (Qdrant или Контур.Норматив)
 
 ---
 
@@ -106,8 +115,8 @@ Topics: `check_dates | progul | ndo | opyanenie | ispytanie | ib_kt | etika | sz
 | Шаблон акта об отсутствии (DS-03) | Черепанова / Касмынина | Нужно получить |
 | Шаблон служебной записки (DS-04) | Черепанова / Касмынина | Нужно получить |
 | «Самодельный дистант» — алгоритм | Касмынина О. | Открыто |
-| Прогул продолжается: ассистент спрашивает или руководитель инициирует? | Клюев О. | Открыто |
-| RAG-AAS ЦИИ интеграция с n8n | Вова Поздняков | Планируется |
+| Передача СЗ: текст в чате или выгрузка в файл? | Клюев О. | Открыто |
+| RAG-AAS ЦИИ интеграция с n8n | Вова Поздняков | Планируется (июль 2026) |
 
 ---
 
