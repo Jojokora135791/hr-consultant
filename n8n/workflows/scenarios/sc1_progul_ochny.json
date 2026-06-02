@@ -1,0 +1,920 @@
+{
+  "name": "SC1: Прогул — очный (офисник)",
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "nodes": [
+    {
+      "id": "sticky-sc1",
+      "name": "📌 Сценарий 1: Прогул, очное присутствие",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -200,
+        -240
+      ],
+      "parameters": {
+        "content": "## SC1: Прогул — очный (офисник)\n\nВызывается из 00_router для state:\nSTART | CHECK_DATES | INCIDENT_TYPE | SUBTYPE | VALIDATE_ABSENCE | BUILD_ACT | CHECK_ONGOING | BUILD_SZ | DONE | EXPIRED\n\n**Вход:** `{ sessionId, userMessage, state, context, history }`\n\n**Выход:** `{ output }` — текст ответа для пользователя\n\n**Общие этапы (START, CHECK_DATES, EXPIRED):**\nReused без изменений в других сценариях.\n\n**Специфические этапы (VALIDATE_ABSENCE, BUILD_ACT):**\nПроверка факта 4+ часов, составление акта — только для офисника.",
+        "height": 360,
+        "width": 560,
+        "color": 6
+      }
+    },
+    {
+      "id": "sc1-trigger",
+      "name": "Вызов из роутера",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        0,
+        300
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "sc1-switch",
+      "name": "Маршрутизация по state внутри сценария",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        220,
+        300
+      ],
+      "parameters": {
+        "mode": "rules",
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {},
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.state }}",
+                    "rightValue": "START",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "START"
+            },
+            {
+              "conditions": {
+                "options": {},
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.state }}",
+                    "rightValue": "CHECK_DATES",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "CHECK_DATES"
+            },
+            {
+              "conditions": {
+                "options": {},
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.state }}",
+                    "rightValue": "INCIDENT_TYPE",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "INCIDENT_TYPE"
+            },
+            {
+              "conditions": {
+                "options": {},
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.state }}",
+                    "rightValue": "SUBTYPE",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "SUBTYPE"
+            },
+            {
+              "conditions": {
+                "options": {},
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.state }}",
+                    "rightValue": "VALIDATE_ABSENCE",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "VALIDATE_ABSENCE"
+            },
+            {
+              "conditions": {
+                "options": {},
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.state }}",
+                    "rightValue": "BUILD_ACT",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "BUILD_ACT"
+            },
+            {
+              "conditions": {
+                "options": {},
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.state }}",
+                    "rightValue": "CHECK_ONGOING",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "CHECK_ONGOING"
+            },
+            {
+              "conditions": {
+                "options": {},
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.state }}",
+                    "rightValue": "BUILD_SZ",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "BUILD_SZ"
+            },
+            {
+              "conditions": {
+                "options": {},
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.state }}",
+                    "rightValue": "DONE",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "DONE"
+            },
+            {
+              "conditions": {
+                "options": {},
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.state }}",
+                    "rightValue": "EXPIRED",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "EXPIRED"
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra"
+        }
+      }
+    },
+    {
+      "id": "sc1-start-prompt",
+      "name": "СТАРТ: сформировать промпт",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        460,
+        -280
+      ],
+      "parameters": {
+        "jsCode": "const { sessionId, userMessage } = $input.first().json;\nconst systemPrompt = `Ты — HR-ассистент для руководителей компании «Контур». Помогаешь оформить дисциплинарные документы.\n\nЧто умею:\n- Проверить сроки привлечения к ответственности по ТК РФ\n- Определить тип нарушения\n- Оформить акт об отсутствии и служебную записку\n\nГраница: до передачи пакета документов эксперту включительно. Решение о взыскании — только кадровый эксперт (Черепанова Т., Касмынина О.).\n\nПравила поведения:\n- Только факты от руководителя, ничего не додумываю\n- Если ситуация нестандартная — направляю к эксперту\n- Тон: деловой, на «вы», кратко\n\nПоздоровайся, коротко объясни что умеешь, попроси описать ситуацию (что случилось, с кем, когда примерно).`;\nreturn [{ json: { sessionId, userMessage, messages: [{ role: 'system', content: systemPrompt }, { role: 'user', content: userMessage }], rag_topic: 'progul' } }];"
+      }
+    },
+    {
+      "id": "sc1-start-llm",
+      "name": "СТАРТ: вызвать LLM",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        680,
+        -280
+      ],
+      "parameters": {
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "value": "HR-LIB-LLM-01",
+          "mode": "id"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "sc1-start-save",
+      "name": "СТАРТ: PostgreSQL — сохранить, state → CHECK_DATES",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        900,
+        -280
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH su AS (INSERT INTO messages (session_id, role, content) VALUES ('{{ $('СТАРТ: сформировать промпт').item.json.sessionId }}', 'user', '{{ $('СТАРТ: сформировать промпт').item.json.userMessage.replace(/'/g, \"''\") }}') RETURNING id), sa AS (INSERT INTO messages (session_id, role, content) VALUES ('{{ $('СТАРТ: сформировать промпт').item.json.sessionId }}', 'assistant', '{{ $json.response.replace(/'/g, \"''\") }}') RETURNING id) UPDATE sessions SET state='CHECK_DATES' WHERE session_id='{{ $('СТАРТ: сформировать промпт').item.json.sessionId }}' RETURNING state",
+        "options": {}
+      },
+      "credentials": {
+        "postgres": {
+          "id": "REPLACE_ME",
+          "name": "hr_assistant PostgreSQL"
+        }
+      }
+    },
+    {
+      "id": "sc1-start-return",
+      "name": "СТАРТ: вернуть ответ",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1120,
+        -280
+      ],
+      "parameters": {
+        "jsCode": "return [{ json: { output: $('СТАРТ: вызвать LLM').item.json.response } }];"
+      }
+    },
+    {
+      "id": "sc1-dates-prompt",
+      "name": "ДАТЫ: сформировать промпт с историей",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        460,
+        -80
+      ],
+      "parameters": {
+        "jsCode": "const { sessionId, userMessage, history } = $input.first().json;\nconst systemPrompt = `Ты — HR-ассистент. Проверяем сроки привлечения к дисциплинарной ответственности по ТК РФ ст.193.\n\nДва ограничения (нарушение хотя бы одного → взыскание невозможно):\n1. Взыскание нельзя применить позднее 6 мес. со дня проступка (практически — 5 мес. 15 дней)\n2. Взыскание нельзя применить позднее 1 мес. со дня обнаружения (практически — 20 кал. дней)\n\nТвоя задача: запросить ДВЕ даты:\n1. Когда произошло нарушение\n2. Когда руководитель об этом узнал\n\nКогда обе даты названы — добавь в конец ответа ОТДЕЛЬНОЙ строкой:\nDATE_DATA: {\"violation\": \"YYYY-MM-DD\", \"discovery\": \"YYYY-MM-DD\"}\nЕсли дату невозможно распознать — null. Если даты ещё не названы — не добавляй DATE_DATA.`;\nconst messages = [{ role: 'system', content: systemPrompt }, ...history, { role: 'user', content: userMessage }];\nreturn [{ json: { sessionId, userMessage, messages, rag_topic: 'check_dates' } }];"
+      }
+    },
+    {
+      "id": "sc1-dates-llm",
+      "name": "ДАТЫ: вызвать LLM",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        680,
+        -80
+      ],
+      "parameters": {
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "value": "HR-LIB-LLM-01",
+          "mode": "id"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "sc1-dates-parse",
+      "name": "ДАТЫ: извлечь даты из ответа LLM",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        900,
+        -80
+      ],
+      "parameters": {
+        "jsCode": "const responseText = $input.first().json.response;\nconst trigger = $('Вызов из роутера').item.json;\nconst match = responseText.match(/DATE_DATA:\\s*(\\{[^}]+\\})/);\nlet datesFound = false, violationDate = null, discoveryDate = null;\nlet cleanResponse = responseText;\nif (match) {\n  try {\n    const d = JSON.parse(match[1]);\n    violationDate = d.violation;\n    discoveryDate = d.discovery;\n    datesFound = !!(violationDate && discoveryDate && violationDate !== 'null' && discoveryDate !== 'null');\n    cleanResponse = responseText.replace(/DATE_DATA:[\\s\\S]*$/, '').trim();\n  } catch(e) {}\n}\nreturn [{ json: { sessionId: trigger.sessionId, userMessage: trigger.userMessage, responseText: cleanResponse, datesFound, violationDate, discoveryDate } }];"
+      }
+    },
+    {
+      "id": "sc1-dates-if",
+      "name": "ДАТЫ: обе даты распознаны?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1120,
+        -80
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {},
+          "conditions": [
+            {
+              "leftValue": "={{ $json.datesFound }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "sc1-dates-check",
+      "name": "ДАТЫ (найдены): вызвать LIB: проверка сроков",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        1340,
+        -180
+      ],
+      "parameters": {
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "value": "HR-LIB-DATES-01",
+          "mode": "id"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "sc1-dates-merge",
+      "name": "ДАТЫ: объединить с результатом проверки",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1560,
+        -180
+      ],
+      "parameters": {
+        "jsCode": "const expiry = $input.first().json;\nconst parsed = $('ДАТЫ: извлечь даты из ответа LLM').item.json;\nreturn [{ json: { ...parsed, isExpired: expiry.isExpired, expiredReason: expiry.expiredReason, violationDeadline: expiry.violationDeadline, discoveryDeadline: expiry.discoveryDeadline } }];"
+      }
+    },
+    {
+      "id": "sc1-dates-expired-if",
+      "name": "ДАТЫ: сроки истекли?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1780,
+        -180
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {},
+          "conditions": [
+            {
+              "leftValue": "={{ $json.isExpired }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "sc1-expired-save",
+      "name": "ПРОСРОЧЕНО: PostgreSQL — сохранить, state → EXPIRED",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        2000,
+        -280
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH su AS (INSERT INTO messages (session_id, role, content) VALUES ('{{ $json.sessionId }}', 'user', '{{ $json.userMessage.replace(/'/g, \"''\") }}') RETURNING id), sa AS (INSERT INTO messages (session_id, role, content) VALUES ('{{ $json.sessionId }}', 'assistant', 'Сроки привлечения к ответственности истекли. Обратитесь к эксперту кадрового учёта.') RETURNING id) UPDATE sessions SET state='EXPIRED', context=context || jsonb_build_object('violation_date','{{ $json.violationDate }}','discovery_date','{{ $json.discoveryDate }}','expired_reason','{{ $json.expiredReason || ''unknown'' }}') WHERE session_id='{{ $json.sessionId }}' RETURNING state",
+        "options": {}
+      },
+      "credentials": {
+        "postgres": {
+          "id": "REPLACE_ME",
+          "name": "hr_assistant PostgreSQL"
+        }
+      }
+    },
+    {
+      "id": "sc1-expired-response",
+      "name": "ПРОСРОЧЕНО: сформировать ответ",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2220,
+        -280
+      ],
+      "parameters": {
+        "jsCode": "const d = $('ДАТЫ: объединить с результатом проверки').item.json;\nconst reason = d.expiredReason === 'violation_date'\n  ? `Срок со дня нарушения (${d.violationDate}) истёк ${d.violationDeadline}`\n  : `Срок с момента обнаружения (${d.discoveryDate}) истёк ${d.discoveryDeadline}`;\nreturn [{ json: { output: `К сожалению, сроки привлечения к дисциплинарной ответственности истекли.\\n\\n${reason}.\\n\\nПо ТК РФ ст.193 применить взыскание уже невозможно.\\n\\nРекомендую обратиться к эксперту кадрового учёта — Касмыниной О. или Черепановой Т.` } }];"
+      }
+    },
+    {
+      "id": "sc1-dates-ok-save",
+      "name": "ДАТЫ (OK): PostgreSQL — сохранить, state → INCIDENT_TYPE",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        2000,
+        -80
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH su AS (INSERT INTO messages (session_id, role, content) VALUES ('{{ $json.sessionId }}', 'user', '{{ $json.userMessage.replace(/'/g, \"''\") }}') RETURNING id), sa AS (INSERT INTO messages (session_id, role, content) VALUES ('{{ $json.sessionId }}', 'assistant', '{{ $json.responseText.replace(/'/g, \"''\") }}') RETURNING id) UPDATE sessions SET state='INCIDENT_TYPE', context=context || jsonb_build_object('violation_date','{{ $json.violationDate }}','discovery_date','{{ $json.discoveryDate }}') WHERE session_id='{{ $json.sessionId }}' RETURNING state",
+        "options": {}
+      },
+      "credentials": {
+        "postgres": {
+          "id": "REPLACE_ME",
+          "name": "hr_assistant PostgreSQL"
+        }
+      }
+    },
+    {
+      "id": "sc1-dates-ok-return",
+      "name": "ДАТЫ (OK): вернуть ответ",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2220,
+        -80
+      ],
+      "parameters": {
+        "jsCode": "return [{ json: { output: $('ДАТЫ: извлечь даты из ответа LLM').item.json.responseText } }];"
+      }
+    },
+    {
+      "id": "sc1-dates-stay-save",
+      "name": "ДАТЫ (ждём): PostgreSQL — сохранить, остаться",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1340,
+        80
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH su AS (INSERT INTO messages (session_id, role, content) VALUES ('{{ $json.sessionId }}', 'user', '{{ $json.userMessage.replace(/'/g, \"''\") }}') RETURNING id), sa AS (INSERT INTO messages (session_id, role, content) VALUES ('{{ $json.sessionId }}', 'assistant', '{{ $json.responseText.replace(/'/g, \"''\") }}') RETURNING id) SELECT 1",
+        "options": {}
+      },
+      "credentials": {
+        "postgres": {
+          "id": "REPLACE_ME",
+          "name": "hr_assistant PostgreSQL"
+        }
+      }
+    },
+    {
+      "id": "sc1-dates-stay-return",
+      "name": "ДАТЫ (ждём): вернуть ответ",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1560,
+        80
+      ],
+      "parameters": {
+        "jsCode": "return [{ json: { output: $('ДАТЫ: извлечь даты из ответа LLM').item.json.responseText } }];"
+      }
+    },
+    {
+      "id": "sc1-todo-incident",
+      "name": "TODO: Определить тип инцидента (INCIDENT_TYPE)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        460,
+        200
+      ],
+      "parameters": {
+        "jsCode": "return [{ json: { output: '[TODO] Этап INCIDENT_TYPE ещё не реализован.' } }];"
+      }
+    },
+    {
+      "id": "sc1-todo-subtype",
+      "name": "TODO: Уточнить подтип — офис или дистант (SUBTYPE)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        460,
+        340
+      ],
+      "parameters": {
+        "jsCode": "return [{ json: { output: '[TODO] Этап SUBTYPE ещё не реализован.' } }];"
+      }
+    },
+    {
+      "id": "sc1-todo-validate",
+      "name": "TODO: Валидация факта отсутствия (VALIDATE_ABSENCE)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        460,
+        480
+      ],
+      "parameters": {
+        "jsCode": "return [{ json: { output: '[TODO] Этап VALIDATE_ABSENCE ещё не реализован.' } }];"
+      }
+    },
+    {
+      "id": "sc1-todo-act",
+      "name": "TODO: Составить акт об отсутствии (BUILD_ACT)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        460,
+        620
+      ],
+      "parameters": {
+        "jsCode": "return [{ json: { output: '[TODO] Этап BUILD_ACT ещё не реализован.' } }];"
+      }
+    },
+    {
+      "id": "sc1-todo-ongoing",
+      "name": "TODO: Прогул продолжается? (CHECK_ONGOING)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        460,
+        760
+      ],
+      "parameters": {
+        "jsCode": "return [{ json: { output: '[TODO] Этап CHECK_ONGOING ещё не реализован.' } }];"
+      }
+    },
+    {
+      "id": "sc1-build-sz",
+      "name": "Вызвать LIB: составить служебную записку (BUILD_SZ)",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        460,
+        900
+      ],
+      "parameters": {
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "value": "HR-LIB-SZ-01",
+          "mode": "id"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "sc1-done-save",
+      "name": "PostgreSQL: сохранить state → DONE",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        460,
+        980
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE sessions SET state = 'DONE' WHERE session_id = '{{ $json.sessionId }}'",
+        "options": {}
+      },
+      "credentials": {
+        "postgres": {
+          "id": "REPLACE_ME",
+          "name": "hr_assistant PostgreSQL"
+        }
+      }
+    },
+    {
+      "id": "sc1-done",
+      "name": "ЗАВЕРШЕНИЕ: пакет документов передан",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        460,
+        1040
+      ],
+      "parameters": {
+        "jsCode": "return [{ json: { output: 'Пакет документов готов.\\n\\nЧто передать эксперту:\\n• Акт об отсутствии на рабочем месте\\n• Служебная записка\\n• Доказательства (скриншоты)\\n\\nКому передать: Черепановой Т. или Касмыниной О. (эксперты кадрового учёта).\\n\\nДальнейшие действия (требование об объяснении, решение о взыскании) — на стороне эксперта.\\n\\nОбращайтесь при следующих ситуациях!' } }];"
+      }
+    },
+    {
+      "id": "sc1-expired-entry",
+      "name": "ПРОСРОЧЕНО (прямой вход): ответ из состояния EXPIRED",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        460,
+        1180
+      ],
+      "parameters": {
+        "jsCode": "const ctx = $input.first().json.context || {};\nreturn [{ json: { output: `Сроки привлечения к ответственности по этому нарушению уже истекли (дата нарушения: ${ctx.violation_date || 'неизвестна'}).\\n\\nОбратитесь за консультацией к Касмыниной О. или Черепановой Т.` } }];"
+      }
+    }
+  ],
+  "connections": {
+    "Вызов из роутера": {
+      "main": [
+        [
+          {
+            "node": "Маршрутизация по state внутри сценария",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Маршрутизация по state внутри сценария": {
+      "main": [
+        [
+          {
+            "node": "СТАРТ: сформировать промпт",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "ДАТЫ: сформировать промпт с историей",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "TODO: Определить тип инцидента (INCIDENT_TYPE)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "TODO: Уточнить подтип — офис или дистант (SUBTYPE)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "TODO: Валидация факта отсутствия (VALIDATE_ABSENCE)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "TODO: Составить акт об отсутствии (BUILD_ACT)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "TODO: Прогул продолжается? (CHECK_ONGOING)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Вызвать LIB: составить служебную записку (BUILD_SZ)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "PostgreSQL: сохранить state → DONE",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "ПРОСРОЧЕНО (прямой вход): ответ из состояния EXPIRED",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "СТАРТ: сформировать промпт": {
+      "main": [
+        [
+          {
+            "node": "СТАРТ: вызвать LLM",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "СТАРТ: вызвать LLM": {
+      "main": [
+        [
+          {
+            "node": "СТАРТ: PostgreSQL — сохранить, state → CHECK_DATES",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "СТАРТ: PostgreSQL — сохранить, state → CHECK_DATES": {
+      "main": [
+        [
+          {
+            "node": "СТАРТ: вернуть ответ",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ДАТЫ: сформировать промпт с историей": {
+      "main": [
+        [
+          {
+            "node": "ДАТЫ: вызвать LLM",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ДАТЫ: вызвать LLM": {
+      "main": [
+        [
+          {
+            "node": "ДАТЫ: извлечь даты из ответа LLM",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ДАТЫ: извлечь даты из ответа LLM": {
+      "main": [
+        [
+          {
+            "node": "ДАТЫ: обе даты распознаны?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ДАТЫ: обе даты распознаны?": {
+      "main": [
+        [
+          {
+            "node": "ДАТЫ (найдены): вызвать LIB: проверка сроков",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "ДАТЫ (ждём): PostgreSQL — сохранить, остаться",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ДАТЫ (найдены): вызвать LIB: проверка сроков": {
+      "main": [
+        [
+          {
+            "node": "ДАТЫ: объединить с результатом проверки",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ДАТЫ: объединить с результатом проверки": {
+      "main": [
+        [
+          {
+            "node": "ДАТЫ: сроки истекли?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ДАТЫ: сроки истекли?": {
+      "main": [
+        [
+          {
+            "node": "ПРОСРОЧЕНО: PostgreSQL — сохранить, state → EXPIRED",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "ДАТЫ (OK): PostgreSQL — сохранить, state → INCIDENT_TYPE",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ПРОСРОЧЕНО: PostgreSQL — сохранить, state → EXPIRED": {
+      "main": [
+        [
+          {
+            "node": "ПРОСРОЧЕНО: сформировать ответ",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ДАТЫ (OK): PostgreSQL — сохранить, state → INCIDENT_TYPE": {
+      "main": [
+        [
+          {
+            "node": "ДАТЫ (OK): вернуть ответ",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ДАТЫ (ждём): PostgreSQL — сохранить, остаться": {
+      "main": [
+        [
+          {
+            "node": "ДАТЫ (ждём): вернуть ответ",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "PostgreSQL: сохранить state → DONE": {
+      "main": [
+        [
+          {
+            "node": "ЗАВЕРШЕНИЕ: пакет документов передан",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "id": "HR-SC1-PROGUL-01"
+}

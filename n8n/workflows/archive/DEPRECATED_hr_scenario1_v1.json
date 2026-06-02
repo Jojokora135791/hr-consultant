@@ -1,0 +1,637 @@
+{
+  "name": "HR-ассистент — Прогул офисник v1",
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "nodes": [
+
+    {
+      "id": "sticky-init",
+      "name": "📌 Инициализация сессии",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [-120, 100],
+      "parameters": {
+        "content": "## 1. Инициализация сессии\n\nПринимаем входящее сообщение из чата.\nИзвлекаем `session_id` и текст сообщения.\n\nЕсли сессия новая — создаём запись в PostgreSQL (state = START).\nЕсли уже существует — загружаем текущий state, контекст и историю диалога.\n\nНа выходе: `{ sessionId, userMessage, state, context, history }`",
+        "height": 320,
+        "width": 740,
+        "color": 5
+      }
+    },
+    {
+      "id": "sticky-router",
+      "name": "📌 Маршрутизация",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [1040, 100],
+      "parameters": {
+        "content": "## 2. Маршрутизация\n\nSwitch по полю `state` сессии.\nКаждый state = своя ветка обработки.\n\n10 выходов:\nSTART → CHECK_DATES → INCIDENT_TYPE → SUBTYPE → VALIDATE_ABSENCE → BUILD_ACT → CHECK_ONGOING → BUILD_SZ → DONE → EXPIRED",
+        "height": 320,
+        "width": 280,
+        "color": 5
+      }
+    },
+    {
+      "id": "sticky-start",
+      "name": "📌 Этап 1: Приветствие",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [1300, -180],
+      "parameters": {
+        "content": "## Этап 1 — START: Приветствие\n\nПервое сообщение пользователя.\nLLM объясняет что умеет и просит описать ситуацию.\nПосле ответа: state → CHECK_DATES.\nСохраняем оба сообщения (user + assistant) в историю.",
+        "height": 200,
+        "width": 920,
+        "color": 6
+      }
+    },
+    {
+      "id": "sticky-check-dates",
+      "name": "📌 Этап 2: Проверка сроков",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [1300, 120],
+      "parameters": {
+        "content": "## Этап 2 — CHECK_DATES: Проверка сроков по ТК РФ ст. 193\n\nLLM запрашивает две даты: нарушение + обнаружение.\nВ конце ответа LLM добавляет машиночитаемый маркер `DATE_DATA: {...}`.\nКод парсит даты из маркера.\n\n**Ветка: даты НЕ найдены** → сохраняем сообщение, остаёмся в CHECK_DATES.\n**Ветка: даты найдены** → SQL-проверка двух условий:\n  - `текущая дата ≤ дата нарушения + 5 мес. 15 дней`\n  - `текущая дата ≤ дата обнаружения + 20 кал. дней`\n\nЕсли хотя бы одно нарушено → state = EXPIRED (взыскание невозможно).\nИначе → state = INCIDENT_TYPE, сохраняем даты в context.",
+        "height": 340,
+        "width": 1980,
+        "color": 6
+      }
+    },
+    {
+      "id": "sticky-todo",
+      "name": "📌 TODO: Этапы 3–8",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [1300, 510],
+      "parameters": {
+        "content": "## TODO: Этапы 3–8\n\nЗаглушки — возвращают текст `[TODO]`.\nПодключены к Switch, но логика не реализована.\n\nОчерёдность реализации:\n3. INCIDENT_TYPE — выбор типа нарушения\n4. SUBTYPE — офисник или дистанционщик\n5. VALIDATE_ABSENCE — факт + доказательства\n6. BUILD_ACT — составить акт\n7. CHECK_ONGOING — прогул продолжается?\n8. BUILD_SZ — составить служебную записку\n9. DONE — финальная передача пакета",
+        "height": 1160,
+        "width": 290,
+        "color": 7
+      }
+    },
+
+    {
+      "id": "t001",
+      "name": "Чат: входящее сообщение",
+      "type": "@n8n/n8n-nodes-langchain.manualChatTrigger",
+      "typeVersion": 1.1,
+      "position": [0, 300],
+      "parameters": {
+        "options": {}
+      }
+    },
+    {
+      "id": "c001",
+      "name": "Извлечь session_id и текст",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [220, 300],
+      "parameters": {
+        "jsCode": "const input = $input.first().json;\nconst sessionId = input.sessionId || ('session_' + Date.now());\nconst userMessage = input.chatInput || '';\nreturn [{ json: { sessionId, userMessage } }];"
+      }
+    },
+    {
+      "id": "p001",
+      "name": "PostgreSQL: создать сессию (если новая)",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [440, 300],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=`INSERT INTO sessions (session_id, state, context) VALUES ('${$('Извлечь session_id и текст').item.json.sessionId}', 'START', '{}') ON CONFLICT (session_id) DO NOTHING`",
+        "options": {}
+      },
+      "credentials": {
+        "postgres": {
+          "id": "REPLACE_ME",
+          "name": "hr_assistant PostgreSQL"
+        }
+      }
+    },
+    {
+      "id": "p002",
+      "name": "PostgreSQL: загрузить состояние и историю",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [660, 300],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=`SELECT s.session_id, s.state, s.context::text AS context, COALESCE(json_agg(json_build_object('role', m.role, 'content', m.content) ORDER BY m.created_at ASC) FILTER (WHERE m.id IS NOT NULL), '[]'::json)::text AS history FROM sessions s LEFT JOIN messages m ON m.session_id = s.session_id WHERE s.session_id = '${$('Извлечь session_id и текст').item.json.sessionId}' GROUP BY s.session_id, s.state, s.context`",
+        "options": {}
+      },
+      "credentials": {
+        "postgres": {
+          "id": "REPLACE_ME",
+          "name": "hr_assistant PostgreSQL"
+        }
+      }
+    },
+    {
+      "id": "c002",
+      "name": "Подготовить данные для маршрутизации",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [880, 300],
+      "parameters": {
+        "jsCode": "const session = $input.first().json;\nconst sessionId = $('Извлечь session_id и текст').item.json.sessionId;\nconst userMessage = $('Извлечь session_id и текст').item.json.userMessage;\nconst state = session.state || 'START';\nlet context = {};\ntry { context = JSON.parse(session.context || '{}'); } catch(e) {}\nlet history = [];\ntry { history = JSON.parse(session.history || '[]'); } catch(e) {}\nreturn [{ json: { sessionId, userMessage, state, context, history } }];"
+      }
+    },
+    {
+      "id": "s001",
+      "name": "Маршрутизация по состоянию",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [1100, 300],
+      "parameters": {
+        "mode": "rules",
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+                "conditions": [{ "leftValue": "={{ $json.state }}", "rightValue": "START", "operator": { "type": "string", "operation": "equals" } }],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "START"
+            },
+            {
+              "conditions": {
+                "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+                "conditions": [{ "leftValue": "={{ $json.state }}", "rightValue": "CHECK_DATES", "operator": { "type": "string", "operation": "equals" } }],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "CHECK_DATES"
+            },
+            {
+              "conditions": {
+                "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+                "conditions": [{ "leftValue": "={{ $json.state }}", "rightValue": "INCIDENT_TYPE", "operator": { "type": "string", "operation": "equals" } }],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "INCIDENT_TYPE"
+            },
+            {
+              "conditions": {
+                "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+                "conditions": [{ "leftValue": "={{ $json.state }}", "rightValue": "SUBTYPE", "operator": { "type": "string", "operation": "equals" } }],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "SUBTYPE"
+            },
+            {
+              "conditions": {
+                "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+                "conditions": [{ "leftValue": "={{ $json.state }}", "rightValue": "VALIDATE_ABSENCE", "operator": { "type": "string", "operation": "equals" } }],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "VALIDATE_ABSENCE"
+            },
+            {
+              "conditions": {
+                "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+                "conditions": [{ "leftValue": "={{ $json.state }}", "rightValue": "BUILD_ACT", "operator": { "type": "string", "operation": "equals" } }],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "BUILD_ACT"
+            },
+            {
+              "conditions": {
+                "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+                "conditions": [{ "leftValue": "={{ $json.state }}", "rightValue": "CHECK_ONGOING", "operator": { "type": "string", "operation": "equals" } }],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "CHECK_ONGOING"
+            },
+            {
+              "conditions": {
+                "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+                "conditions": [{ "leftValue": "={{ $json.state }}", "rightValue": "BUILD_SZ", "operator": { "type": "string", "operation": "equals" } }],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "BUILD_SZ"
+            },
+            {
+              "conditions": {
+                "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+                "conditions": [{ "leftValue": "={{ $json.state }}", "rightValue": "DONE", "operator": { "type": "string", "operation": "equals" } }],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "DONE"
+            },
+            {
+              "conditions": {
+                "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+                "conditions": [{ "leftValue": "={{ $json.state }}", "rightValue": "EXPIRED", "operator": { "type": "string", "operation": "equals" } }],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "EXPIRED"
+            }
+          ]
+        },
+        "options": { "fallbackOutput": "extra" }
+      }
+    },
+
+    {
+      "id": "c010",
+      "name": "СТАРТ: сформировать промпт",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1340, 0],
+      "parameters": {
+        "jsCode": "const { sessionId, userMessage } = $input.first().json;\nconst systemPrompt = `Ты — HR-ассистент для руководителей компании «Контур». Помогаешь оформить дисциплинарные документы: акт об отсутствии и служебную записку.\n\nЧто умею:\n- Проверить сроки привлечения к ответственности по ТК РФ\n- Определить тип нарушения\n- Оформить акт об отсутствии и служебную записку по шаблону\n\nГраница: до передачи пакета документов эксперту. Решение о взыскании — только кадровый эксперт.\n\nПравила: никогда ничего не додумываю — только факты от руководителя. Общаюсь на «вы», деловой тон, кратко.\n\nПоздоровайся, коротко объясни что умеешь, и попроси описать ситуацию. Ответь одним коротким сообщением.`;\nconst messages = [\n  { role: 'system', content: systemPrompt },\n  { role: 'user', content: userMessage }\n];\nreturn [{ json: { sessionId, userMessage, messages } }];"
+      }
+    },
+    {
+      "id": "h010",
+      "name": "СТАРТ: запрос к LLM (Ollama)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1560, 0],
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:11434/api/chat",
+        "sendBody": true,
+        "contentType": "json",
+        "body": "={{ JSON.stringify({ model: 'qwen2.5:7b', messages: $json.messages, stream: false }) }}"
+      }
+    },
+    {
+      "id": "p010",
+      "name": "PostgreSQL: сохранить сообщения и перейти в CHECK_DATES",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [1780, 0],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=`WITH save_user AS (INSERT INTO messages (session_id, role, content) VALUES ('${$('Извлечь session_id и текст').item.json.sessionId}', 'user', '${$('СТАРТ: сформировать промпт').item.json.userMessage.replace(/'/g, \"''\")}') RETURNING id), save_assistant AS (INSERT INTO messages (session_id, role, content) VALUES ('${$('Извлечь session_id и текст').item.json.sessionId}', 'assistant', '${$json.message.content.replace(/'/g, \"''\")}') RETURNING id) UPDATE sessions SET state = 'CHECK_DATES' WHERE session_id = '${$('Извлечь session_id и текст').item.json.sessionId}' RETURNING state`",
+        "options": {}
+      },
+      "credentials": {
+        "postgres": {
+          "id": "REPLACE_ME",
+          "name": "hr_assistant PostgreSQL"
+        }
+      }
+    },
+    {
+      "id": "c011",
+      "name": "СТАРТ: вернуть ответ пользователю",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2000, 0],
+      "parameters": {
+        "jsCode": "const ollamaResponse = $('СТАРТ: запрос к LLM (Ollama)').item.json;\nreturn [{ json: { output: ollamaResponse.message.content } }];"
+      }
+    },
+
+    {
+      "id": "c020",
+      "name": "ДАТЫ: сформировать промпт с историей",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1340, 300],
+      "parameters": {
+        "jsCode": "const { sessionId, userMessage, history } = $input.first().json;\nconst systemPrompt = `Ты — HR-ассистент. Проверяем сроки привлечения к дисциплинарной ответственности.\n\nПо ТК РФ ст. 193 два ограничения:\n1. Взыскание нельзя применить позднее 6 мес. со дня проступка (практически — 5 мес. 15 дней)\n2. Взыскание нельзя применить позднее 1 мес. со дня обнаружения (практически — 20 кал. дней)\n\nЕсли хотя бы одно условие нарушено — взыскание невозможно.\n\nТвоя задача: запросить ДВЕ даты:\n1. Когда произошло нарушение (сотрудник отсутствовал)\n2. Когда руководитель об этом узнал\n\nФормат дат — любой, главное понять. Не задавай других вопросов.\n\nКогда руководитель назовёт обе даты — добавь в конец ответа ОТДЕЛЬНОЙ строкой:\nDATE_DATA: {\"violation\": \"YYYY-MM-DD\", \"discovery\": \"YYYY-MM-DD\"}\nЕсли дату невозможно распознать — null. Если даты ещё не названы — не добавляй DATE_DATA вообще.`;\nconst messages = [\n  { role: 'system', content: systemPrompt },\n  ...history,\n  { role: 'user', content: userMessage }\n];\nreturn [{ json: { sessionId, userMessage, messages } }];"
+      }
+    },
+    {
+      "id": "h020",
+      "name": "ДАТЫ: запрос к LLM (Ollama)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1560, 300],
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:11434/api/chat",
+        "sendBody": true,
+        "contentType": "json",
+        "body": "={{ JSON.stringify({ model: 'qwen2.5:7b', messages: $json.messages, stream: false }) }}"
+      }
+    },
+    {
+      "id": "c021",
+      "name": "ДАТЫ: извлечь даты из ответа LLM",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1780, 300],
+      "parameters": {
+        "jsCode": "const responseText = $input.first().json.message.content;\nconst sessionId = $('Извлечь session_id и текст').item.json.sessionId;\nconst userMessage = $('ДАТЫ: сформировать промпт с историей').item.json.userMessage;\n\nconst dateMatch = responseText.match(/DATE_DATA:\\s*(\\{[^}]+\\})/);\nlet datesFound = false;\nlet violationDate = null;\nlet discoveryDate = null;\nlet cleanResponse = responseText;\n\nif (dateMatch) {\n  try {\n    const dates = JSON.parse(dateMatch[1]);\n    violationDate = dates.violation;\n    discoveryDate = dates.discovery;\n    datesFound = !!(violationDate && discoveryDate && violationDate !== 'null' && discoveryDate !== 'null');\n    cleanResponse = responseText.replace(/DATE_DATA:[\\s\\S]*$/, '').trim();\n  } catch(e) {}\n}\n\nreturn [{ json: { sessionId, userMessage, responseText: cleanResponse, datesFound, violationDate, discoveryDate } }];"
+      }
+    },
+    {
+      "id": "i020",
+      "name": "ДАТЫ: обе даты распознаны?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [2000, 300],
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+          "conditions": [{ "leftValue": "={{ $json.datesFound }}", "rightValue": true, "operator": { "type": "boolean", "operation": "true" } }],
+          "combinator": "and"
+        }
+      }
+    },
+
+    {
+      "id": "p021",
+      "name": "PostgreSQL: проверить сроки по ТК РФ ст.193",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [2220, 160],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=`SELECT CASE WHEN CURRENT_DATE > '${$json.violationDate}'::date + INTERVAL '5 months 15 days' THEN true WHEN CURRENT_DATE > '${$json.discoveryDate}'::date + INTERVAL '20 days' THEN true ELSE false END AS is_expired, CASE WHEN CURRENT_DATE > '${$json.violationDate}'::date + INTERVAL '5 months 15 days' THEN 'violation_date' WHEN CURRENT_DATE > '${$json.discoveryDate}'::date + INTERVAL '20 days' THEN 'discovery_date' ELSE null END AS expired_reason, ('${$json.violationDate}'::date + INTERVAL '5 months 15 days')::text AS violation_deadline, ('${$json.discoveryDate}'::date + INTERVAL '20 days')::text AS discovery_deadline`",
+        "options": {}
+      },
+      "credentials": {
+        "postgres": {
+          "id": "REPLACE_ME",
+          "name": "hr_assistant PostgreSQL"
+        }
+      }
+    },
+    {
+      "id": "c022",
+      "name": "ДАТЫ: объединить результат проверки сроков",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2440, 160],
+      "parameters": {
+        "jsCode": "const expiry = $input.first().json;\nconst parsed = $('ДАТЫ: извлечь даты из ответа LLM').item.json;\nreturn [{ json: {\n  ...parsed,\n  isExpired: expiry.is_expired,\n  expiredReason: expiry.expired_reason,\n  violationDeadline: expiry.violation_deadline,\n  discoveryDeadline: expiry.discovery_deadline\n} }];"
+      }
+    },
+    {
+      "id": "i021",
+      "name": "ДАТЫ: сроки истекли?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [2660, 160],
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+          "conditions": [{ "leftValue": "={{ $json.isExpired }}", "rightValue": true, "operator": { "type": "boolean", "operation": "true" } }],
+          "combinator": "and"
+        }
+      }
+    },
+
+    {
+      "id": "p022",
+      "name": "PostgreSQL: сохранить сообщение, state → EXPIRED",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [2880, 60],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=`WITH save_user AS (INSERT INTO messages (session_id, role, content) VALUES ('${$json.sessionId}', 'user', '${$json.userMessage.replace(/'/g, \"''\")}') RETURNING id), update_state AS (UPDATE sessions SET state = 'EXPIRED', context = context || jsonb_build_object('violation_date', '${$json.violationDate}', 'discovery_date', '${$json.discoveryDate}', 'expired_reason', '${$json.expiredReason || 'unknown'}') WHERE session_id = '${$json.sessionId}' RETURNING state) SELECT * FROM update_state`",
+        "options": {}
+      },
+      "credentials": {
+        "postgres": {
+          "id": "REPLACE_ME",
+          "name": "hr_assistant PostgreSQL"
+        }
+      }
+    },
+    {
+      "id": "c023",
+      "name": "ПРОСРОЧЕНО: сформировать ответ о невозможности взыскания",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [3100, 60],
+      "parameters": {
+        "jsCode": "const d = $('ДАТЫ: объединить результат проверки сроков').item.json;\nconst reason = d.expiredReason === 'violation_date'\n  ? `Срок со дня нарушения (${d.violationDate}) истёк ${d.violationDeadline}`\n  : `Срок с момента обнаружения (${d.discoveryDate}) истёк ${d.discoveryDeadline}`;\nconst msg = `К сожалению, сроки привлечения к дисциплинарной ответственности истекли.\\n\\n${reason}.\\n\\nПо ТК РФ ст. 193 применить взыскание уже невозможно.\\n\\nРекомендую обратиться к эксперту кадрового учёта — Касмыниной О. или Черепановой Т. за консультацией о возможных дальнейших действиях.`;\nreturn [{ json: { output: msg } }];"
+      }
+    },
+
+    {
+      "id": "p023",
+      "name": "PostgreSQL: сохранить сообщения, state → INCIDENT_TYPE",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [2880, 260],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=`WITH save_user AS (INSERT INTO messages (session_id, role, content) VALUES ('${$json.sessionId}', 'user', '${$json.userMessage.replace(/'/g, \"''\")}') RETURNING id), save_assistant AS (INSERT INTO messages (session_id, role, content) VALUES ('${$json.sessionId}', 'assistant', '${$json.responseText.replace(/'/g, \"''\")}') RETURNING id), update_state AS (UPDATE sessions SET state = 'INCIDENT_TYPE', context = context || jsonb_build_object('violation_date', '${$json.violationDate}', 'discovery_date', '${$json.discoveryDate}') WHERE session_id = '${$json.sessionId}' RETURNING state) SELECT '${$json.responseText.replace(/'/g, \"''\")}'::text AS output`",
+        "options": {}
+      },
+      "credentials": {
+        "postgres": {
+          "id": "REPLACE_ME",
+          "name": "hr_assistant PostgreSQL"
+        }
+      }
+    },
+    {
+      "id": "c024",
+      "name": "ДАТЫ (OK): вернуть ответ пользователю",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [3100, 260],
+      "parameters": {
+        "jsCode": "return [{ json: { output: $input.first().json.output } }];"
+      }
+    },
+
+    {
+      "id": "p024",
+      "name": "PostgreSQL: сохранить сообщения, остаться в CHECK_DATES",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [2220, 440],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=`WITH save_user AS (INSERT INTO messages (session_id, role, content) VALUES ('${$json.sessionId}', 'user', '${$json.userMessage.replace(/'/g, \"''\")}') RETURNING id), save_assistant AS (INSERT INTO messages (session_id, role, content) VALUES ('${$json.sessionId}', 'assistant', '${$json.responseText.replace(/'/g, \"''\")}') RETURNING id) SELECT '${$json.responseText.replace(/'/g, \"''\")}'::text AS output`",
+        "options": {}
+      },
+      "credentials": {
+        "postgres": {
+          "id": "REPLACE_ME",
+          "name": "hr_assistant PostgreSQL"
+        }
+      }
+    },
+    {
+      "id": "c025",
+      "name": "ДАТЫ (ждём): вернуть ответ пользователю",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2440, 440],
+      "parameters": {
+        "jsCode": "return [{ json: { output: $input.first().json.output } }];"
+      }
+    },
+
+    {
+      "id": "c030",
+      "name": "TODO: Тип инцидента (INCIDENT_TYPE)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1340, 560],
+      "parameters": {
+        "jsCode": "return [{ json: { output: '[TODO] Этап INCIDENT_TYPE ещё не реализован.' } }];"
+      }
+    },
+    {
+      "id": "c040",
+      "name": "TODO: Подтип — офис или дистант (SUBTYPE)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1340, 700],
+      "parameters": {
+        "jsCode": "return [{ json: { output: '[TODO] Этап SUBTYPE ещё не реализован.' } }];"
+      }
+    },
+    {
+      "id": "c050",
+      "name": "TODO: Валидация факта отсутствия (VALIDATE_ABSENCE)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1340, 840],
+      "parameters": {
+        "jsCode": "return [{ json: { output: '[TODO] Этап VALIDATE_ABSENCE ещё не реализован.' } }];"
+      }
+    },
+    {
+      "id": "c060",
+      "name": "TODO: Составить акт об отсутствии (BUILD_ACT)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1340, 980],
+      "parameters": {
+        "jsCode": "return [{ json: { output: '[TODO] Этап BUILD_ACT ещё не реализован.' } }];"
+      }
+    },
+    {
+      "id": "c070",
+      "name": "TODO: Прогул продолжается? (CHECK_ONGOING)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1340, 1120],
+      "parameters": {
+        "jsCode": "return [{ json: { output: '[TODO] Этап CHECK_ONGOING ещё не реализован.' } }];"
+      }
+    },
+    {
+      "id": "c080",
+      "name": "TODO: Составить служебную записку (BUILD_SZ)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1340, 1260],
+      "parameters": {
+        "jsCode": "return [{ json: { output: '[TODO] Этап BUILD_SZ ещё не реализован.' } }];"
+      }
+    },
+    {
+      "id": "c090",
+      "name": "TODO: Завершение — передача пакета (DONE)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1340, 1400],
+      "parameters": {
+        "jsCode": "return [{ json: { output: 'Сессия завершена. Пакет документов готов. Обращайтесь при следующих ситуациях!' } }];"
+      }
+    },
+    {
+      "id": "c091",
+      "name": "TODO: Прямой вход в EXPIRED (если state уже был просрочен)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1340, 1540],
+      "parameters": {
+        "jsCode": "return [{ json: { output: 'Сроки привлечения к ответственности истекли. Обратитесь к эксперту кадрового учёта — Касмыниной О. или Черепановой Т.' } }];"
+      }
+    }
+
+  ],
+  "connections": {
+    "Чат: входящее сообщение": {
+      "main": [[{ "node": "Извлечь session_id и текст", "type": "main", "index": 0 }]]
+    },
+    "Извлечь session_id и текст": {
+      "main": [[{ "node": "PostgreSQL: создать сессию (если новая)", "type": "main", "index": 0 }]]
+    },
+    "PostgreSQL: создать сессию (если новая)": {
+      "main": [[{ "node": "PostgreSQL: загрузить состояние и историю", "type": "main", "index": 0 }]]
+    },
+    "PostgreSQL: загрузить состояние и историю": {
+      "main": [[{ "node": "Подготовить данные для маршрутизации", "type": "main", "index": 0 }]]
+    },
+    "Подготовить данные для маршрутизации": {
+      "main": [[{ "node": "Маршрутизация по состоянию", "type": "main", "index": 0 }]]
+    },
+    "Маршрутизация по состоянию": {
+      "main": [
+        [{ "node": "СТАРТ: сформировать промпт",                           "type": "main", "index": 0 }],
+        [{ "node": "ДАТЫ: сформировать промпт с историей",                  "type": "main", "index": 0 }],
+        [{ "node": "TODO: Тип инцидента (INCIDENT_TYPE)",                   "type": "main", "index": 0 }],
+        [{ "node": "TODO: Подтип — офис или дистант (SUBTYPE)",             "type": "main", "index": 0 }],
+        [{ "node": "TODO: Валидация факта отсутствия (VALIDATE_ABSENCE)",   "type": "main", "index": 0 }],
+        [{ "node": "TODO: Составить акт об отсутствии (BUILD_ACT)",         "type": "main", "index": 0 }],
+        [{ "node": "TODO: Прогул продолжается? (CHECK_ONGOING)",            "type": "main", "index": 0 }],
+        [{ "node": "TODO: Составить служебную записку (BUILD_SZ)",          "type": "main", "index": 0 }],
+        [{ "node": "TODO: Завершение — передача пакета (DONE)",             "type": "main", "index": 0 }],
+        [{ "node": "TODO: Прямой вход в EXPIRED (если state уже был просрочен)", "type": "main", "index": 0 }]
+      ]
+    },
+    "СТАРТ: сформировать промпт": {
+      "main": [[{ "node": "СТАРТ: запрос к LLM (Ollama)", "type": "main", "index": 0 }]]
+    },
+    "СТАРТ: запрос к LLM (Ollama)": {
+      "main": [[{ "node": "PostgreSQL: сохранить сообщения и перейти в CHECK_DATES", "type": "main", "index": 0 }]]
+    },
+    "PostgreSQL: сохранить сообщения и перейти в CHECK_DATES": {
+      "main": [[{ "node": "СТАРТ: вернуть ответ пользователю", "type": "main", "index": 0 }]]
+    },
+    "ДАТЫ: сформировать промпт с историей": {
+      "main": [[{ "node": "ДАТЫ: запрос к LLM (Ollama)", "type": "main", "index": 0 }]]
+    },
+    "ДАТЫ: запрос к LLM (Ollama)": {
+      "main": [[{ "node": "ДАТЫ: извлечь даты из ответа LLM", "type": "main", "index": 0 }]]
+    },
+    "ДАТЫ: извлечь даты из ответа LLM": {
+      "main": [[{ "node": "ДАТЫ: обе даты распознаны?", "type": "main", "index": 0 }]]
+    },
+    "ДАТЫ: обе даты распознаны?": {
+      "main": [
+        [{ "node": "PostgreSQL: проверить сроки по ТК РФ ст.193",      "type": "main", "index": 0 }],
+        [{ "node": "PostgreSQL: сохранить сообщения, остаться в CHECK_DATES", "type": "main", "index": 0 }]
+      ]
+    },
+    "PostgreSQL: проверить сроки по ТК РФ ст.193": {
+      "main": [[{ "node": "ДАТЫ: объединить результат проверки сроков", "type": "main", "index": 0 }]]
+    },
+    "ДАТЫ: объединить результат проверки сроков": {
+      "main": [[{ "node": "ДАТЫ: сроки истекли?", "type": "main", "index": 0 }]]
+    },
+    "ДАТЫ: сроки истекли?": {
+      "main": [
+        [{ "node": "PostgreSQL: сохранить сообщение, state → EXPIRED",          "type": "main", "index": 0 }],
+        [{ "node": "PostgreSQL: сохранить сообщения, state → INCIDENT_TYPE",    "type": "main", "index": 0 }]
+      ]
+    },
+    "PostgreSQL: сохранить сообщение, state → EXPIRED": {
+      "main": [[{ "node": "ПРОСРОЧЕНО: сформировать ответ о невозможности взыскания", "type": "main", "index": 0 }]]
+    },
+    "PostgreSQL: сохранить сообщения, state → INCIDENT_TYPE": {
+      "main": [[{ "node": "ДАТЫ (OK): вернуть ответ пользователю", "type": "main", "index": 0 }]]
+    },
+    "PostgreSQL: сохранить сообщения, остаться в CHECK_DATES": {
+      "main": [[{ "node": "ДАТЫ (ждём): вернуть ответ пользователю", "type": "main", "index": 0 }]]
+    }
+  }
+}

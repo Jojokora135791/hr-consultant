@@ -1,0 +1,14 @@
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+Thumbs.db
+
+# Claude Code internal
+.claude/scheduled_tasks.lock
+
+# Временные файлы
+tmp/
+*.tmp
+*.log

@@ -1,0 +1,592 @@
+{
+  "name": "00: HR-ассистент — точка входа",
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "nodes": [
+    {
+      "id": "sticky-router",
+      "name": "📌 Точка входа — что здесь происходит",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -200,
+        -200
+      ],
+      "parameters": {
+        "content": "## 00: Точка входа\n\nПринимает сообщение из чата.\n\n**Шаги:**\n1. Извлечь session_id и текст\n2. Вызвать LIB: сессия → получить state, context, history\n3. Switch по `state`:\n   - `START`, `CHECK_DATES` — запустить нужный sub-workflow сценария\n   - `INCIDENT_TYPE` — определить сценарий, направить в нужный sc*.json\n\n**Логика определения сценария (INCIDENT_TYPE):**\nLLM классифицирует описание руководителя и возвращает тип:\n`progul_ochny` | `progul_distant` | `progul_unclear` | `ndo` | `etika` | `opyanenie` | `ispytanie` | `ib_kt`\n\nПосле определения — state сразу переходит в нужный сценарий.",
+        "height": 380,
+        "width": 600,
+        "color": 5
+      }
+    },
+    {
+      "id": "r-trigger",
+      "name": "Чат: входящее сообщение",
+      "type": "@n8n/n8n-nodes-langchain.manualChatTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        0,
+        300
+      ],
+      "parameters": {
+        "options": {}
+      }
+    },
+    {
+      "id": "r-extract",
+      "name": "Извлечь session_id и текст сообщения",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        300
+      ],
+      "parameters": {
+        "jsCode": "const input = $input.first().json;\n// manualChatTrigger v1.1 может отдавать сообщение под разными ключами\nconst userMessage = input.chatInput || input.input || input.message || input.text || input.query || '';\nconst sessionId = input.sessionId || ('session_' + Date.now());\nreturn [{ json: { sessionId, userMessage, _rawInput: JSON.stringify(input) } }];"
+      }
+    },
+    {
+      "id": "r-session",
+      "name": "Вызвать LIB: инициализация сессии",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        440,
+        300
+      ],
+      "parameters": {
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "value": "HR-LIB-SES-01",
+          "mode": "id"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "r-switch",
+      "name": "Маршрутизация по состоянию сессии",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        660,
+        300
+      ],
+      "parameters": {
+        "mode": "rules",
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {},
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.state }}",
+                    "rightValue": "START",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "START"
+            },
+            {
+              "conditions": {
+                "options": {},
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.state }}",
+                    "rightValue": "CHECK_DATES",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "CHECK_DATES"
+            },
+            {
+              "conditions": {
+                "options": {},
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.state }}",
+                    "rightValue": "INCIDENT_TYPE",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "INCIDENT_TYPE"
+            },
+            {
+              "conditions": {
+                "options": {},
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.context.scenario }}",
+                    "rightValue": "progul_ochny",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "SC1_PROGUL_OCHNY"
+            },
+            {
+              "conditions": {
+                "options": {},
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.context.scenario }}",
+                    "rightValue": "progul_distant",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "SC2_PROGUL_DISTANT"
+            },
+            {
+              "conditions": {
+                "options": {},
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.context.scenario }}",
+                    "rightValue": "progul_unclear",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "SC3_PROGUL_UNCLEAR"
+            },
+            {
+              "conditions": {
+                "options": {},
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.context.scenario }}",
+                    "rightValue": "ndo",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "SC4_NDO"
+            },
+            {
+              "conditions": {
+                "options": {},
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.context.scenario }}",
+                    "rightValue": "etika",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "SC5_ETIKA"
+            },
+            {
+              "conditions": {
+                "options": {},
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.context.scenario }}",
+                    "rightValue": "opyanenie",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "SC6_OPYANENIE"
+            },
+            {
+              "conditions": {
+                "options": {},
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.context.scenario }}",
+                    "rightValue": "ispytanie",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "SC7_ISPYTANIE"
+            },
+            {
+              "conditions": {
+                "options": {},
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.context.scenario }}",
+                    "rightValue": "ib_kt",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "SC8_IB_KT"
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra"
+        }
+      }
+    },
+    {
+      "id": "r-start",
+      "name": "Вызвать сценарий: START (приветствие)",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        900,
+        -200
+      ],
+      "parameters": {
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "value": "HR-SC1-PROGUL-01",
+          "mode": "id"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "r-check-dates",
+      "name": "Вызвать сценарий: CHECK_DATES (проверка сроков)",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        900,
+        -60
+      ],
+      "parameters": {
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "value": "HR-SC1-PROGUL-01",
+          "mode": "id"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "r-incident-type",
+      "name": "Определить тип инцидента (INCIDENT_TYPE)",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        900,
+        80
+      ],
+      "parameters": {
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "value": "HR-SC1-PROGUL-01",
+          "mode": "id"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "r-sc1",
+      "name": "Вызвать: Сценарий 1 — Прогул очный",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        900,
+        220
+      ],
+      "parameters": {
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "value": "HR-SC1-PROGUL-01",
+          "mode": "id"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "r-sc2",
+      "name": "TODO: Сценарий 2 — Прогул дистанционный",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        900,
+        340
+      ],
+      "parameters": {
+        "jsCode": "return [{ json: { output: '[TODO] Сценарий 2 (прогул дистанционный) ещё не реализован.' } }];"
+      }
+    },
+    {
+      "id": "r-sc3",
+      "name": "TODO: Сценарий 3 — Прогул неопределённый",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        900,
+        460
+      ],
+      "parameters": {
+        "jsCode": "return [{ json: { output: '[TODO] Сценарий 3 (прогул неопределённый) ещё не реализован.' } }];"
+      }
+    },
+    {
+      "id": "r-sc4",
+      "name": "TODO: Сценарий 4 — НДО",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        900,
+        580
+      ],
+      "parameters": {
+        "jsCode": "return [{ json: { output: '[TODO] Сценарий 4 (ненадлежащее исполнение ДО) ещё не реализован.' } }];"
+      }
+    },
+    {
+      "id": "r-sc5",
+      "name": "TODO: Сценарий 5 — Этика",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        900,
+        700
+      ],
+      "parameters": {
+        "jsCode": "return [{ json: { output: '[TODO] Сценарий 5 (нарушение этических норм) ещё не реализован.' } }];"
+      }
+    },
+    {
+      "id": "r-sc6",
+      "name": "TODO: Сценарий 6 — Опьянение",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        900,
+        820
+      ],
+      "parameters": {
+        "jsCode": "return [{ json: { output: '[TODO] Сценарий 6 (опьянение) ещё не реализован.' } }];"
+      }
+    },
+    {
+      "id": "r-sc7",
+      "name": "TODO: Сценарий 7 — Испытательный срок",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        900,
+        940
+      ],
+      "parameters": {
+        "jsCode": "return [{ json: { output: '[TODO] Сценарий 7 (испытательный срок) ещё не реализован.' } }];"
+      }
+    },
+    {
+      "id": "r-sc8",
+      "name": "TODO: Сценарий 8 — ИБ и КТ",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        900,
+        1060
+      ],
+      "parameters": {
+        "jsCode": "return [{ json: { output: 'Нарушения в сфере ИБ и коммерческой тайны — вне компетенции ассистента. Обратитесь в юридическую службу и ОИБО.' } }];"
+      }
+    },
+    {
+      "id": "r-fallback",
+      "name": "Неизвестное состояние — сброс к эксперту",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        900,
+        1180
+      ],
+      "parameters": {
+        "jsCode": "return [{ json: { output: 'Не удалось определить контекст ситуации. Пожалуйста, обратитесь к эксперту кадрового учёта — Касмыниной О. или Черепановой Т.' } }];"
+      }
+    }
+  ],
+  "connections": {
+    "Чат: входящее сообщение": {
+      "main": [
+        [
+          {
+            "node": "Извлечь session_id и текст сообщения",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Извлечь session_id и текст сообщения": {
+      "main": [
+        [
+          {
+            "node": "Вызвать LIB: инициализация сессии",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Вызвать LIB: инициализация сессии": {
+      "main": [
+        [
+          {
+            "node": "Маршрутизация по состоянию сессии",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Маршрутизация по состоянию сессии": {
+      "main": [
+        [
+          {
+            "node": "Вызвать сценарий: START (приветствие)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Вызвать сценарий: CHECK_DATES (проверка сроков)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Определить тип инцидента (INCIDENT_TYPE)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Вызвать: Сценарий 1 — Прогул очный",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "TODO: Сценарий 2 — Прогул дистанционный",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "TODO: Сценарий 3 — Прогул неопределённый",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "TODO: Сценарий 4 — НДО",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "TODO: Сценарий 5 — Этика",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "TODO: Сценарий 6 — Опьянение",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "TODO: Сценарий 7 — Испытательный срок",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "TODO: Сценарий 8 — ИБ и КТ",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Неизвестное состояние — сброс к эксперту",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "id": "HR-00-ROUTER-01"
+}

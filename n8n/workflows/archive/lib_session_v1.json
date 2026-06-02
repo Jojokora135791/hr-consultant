@@ -1,0 +1,127 @@
+{
+  "name": "LIB: инициализация сессии",
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "nodes": [
+    {
+      "id": "sticky-session",
+      "name": "📌 Что делает этот sub-workflow",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -200,
+        -160
+      ],
+      "parameters": {
+        "content": "## LIB: инициализация сессии\n\n**Вход:** `sessionId`, `userMessage`\n\n**Что делает:**\n1. Если сессии нет → создаёт с state = START\n2. Загружает state, context, историю диалога\n\n**Выход:** `{ sessionId, userMessage, state, context, history }`\n\nИспользуется: во всех сценариях как первый шаг.",
+        "height": 260,
+        "width": 440,
+        "color": 5
+      }
+    },
+    {
+      "id": "ses-trigger",
+      "name": "Вызов из другого workflow",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        0,
+        300
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "ses-upsert",
+      "name": "PostgreSQL: создать сессию (если новая)",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        220,
+        300
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO sessions (session_id, state, context) VALUES ('{{ $json.sessionId }}', 'START', '{}') ON CONFLICT (session_id) DO NOTHING",
+        "options": {}
+      },
+      "credentials": {
+        "postgres": {
+          "id": "REPLACE_ME",
+          "name": "hr_assistant PostgreSQL"
+        }
+      }
+    },
+    {
+      "id": "ses-load",
+      "name": "PostgreSQL: загрузить state, context и историю",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        440,
+        300
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT s.session_id, s.state, s.context::text AS context, COALESCE(json_agg(json_build_object('role', m.role, 'content', m.content) ORDER BY m.created_at ASC) FILTER (WHERE m.id IS NOT NULL), '[]'::json)::text AS history FROM sessions s LEFT JOIN messages m ON m.session_id = s.session_id WHERE s.session_id = '{{ $('Вызов из другого workflow').item.json.sessionId }}' GROUP BY s.session_id, s.state, s.context",
+        "options": {}
+      },
+      "credentials": {
+        "postgres": {
+          "id": "REPLACE_ME",
+          "name": "hr_assistant PostgreSQL"
+        }
+      }
+    },
+    {
+      "id": "ses-prepare",
+      "name": "Собрать выходные данные сессии",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        660,
+        300
+      ],
+      "parameters": {
+        "jsCode": "const session = $input.first().json;\nconst trigger = $('Вызов из другого workflow').item.json;\nconst state = session.state || 'START';\nlet context = {};\ntry { context = JSON.parse(session.context || '{}'); } catch(e) {}\nlet history = [];\ntry { history = JSON.parse(session.history || '[]'); } catch(e) {}\nreturn [{ json: {\n  sessionId: trigger.sessionId,\n  userMessage: trigger.userMessage,\n  state,\n  context,\n  history\n} }];"
+      }
+    }
+  ],
+  "connections": {
+    "Вызов из другого workflow": {
+      "main": [
+        [
+          {
+            "node": "PostgreSQL: создать сессию (если новая)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "PostgreSQL: создать сессию (если новая)": {
+      "main": [
+        [
+          {
+            "node": "PostgreSQL: загрузить state, context и историю",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "PostgreSQL: загрузить state, context и историю": {
+      "main": [
+        [
+          {
+            "node": "Собрать выходные данные сессии",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "id": "HR-LIB-SES-01"
+}
