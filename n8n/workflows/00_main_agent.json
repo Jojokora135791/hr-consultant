@@ -1,43 +1,41 @@
 {
   "name": "HR-ассистент (AI Agent)",
   "active": false,
-  "settings": {
-    "executionOrder": "v1"
-  },
+  "settings": { "executionOrder": "v1" },
   "nodes": [
     {
       "id": "sticky-main",
-      "name": "📌 Главный агент — архитектура v2",
+      "name": "📌 HR-ассистент v2 — AI Agent",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
-      "position": [-280, -220],
+      "position": [-240, -220],
       "parameters": {
-        "content": "## HR-ассистент v2 — AI Agent\n\n**Архитектура:** Chat Trigger → AI Agent (qwen2.5:7b) + инструменты\n\n**Инструменты:**\n- `check_dates` — проверка сроков ТК РФ ст.193 → вызывает lib_check_dates\n- `get_rag_context` — справка по НПА → вызывает lib_rag_context\n\n**Память:** Window Buffer Memory (20 последних сообщений)\n\n**Что изменилось от v1:**\n- Нет жёсткой state machine\n- Нет PostgreSQL для сессий\n- LLM сам управляет диалогом\n- 00_router, lib_session, lib_llm_call упразднены → archive/\n\n**Как настроить:**\n1. Создать credential Ollama API (Base URL: http://127.0.0.1:11434)\n2. Заменить REPLACE_ME_OLLAMA на ID созданного credential\n3. Убедиться что lib_check_dates и lib_rag_context импортированы\n4. Активировать этот workflow",
-        "height": 380,
-        "width": 600,
-        "color": 3
+        "content": "## HR-ассистент (AI Agent) v2\n\n**Точка входа.** Агент ведёт диалог с руководителем,\nсобирает все данные и вызывает нужные инструменты.\n\n**Инструменты:**\n- `check_dates` → lib_check_dates (HR-LIB-DATES-01)\n- `generate_documents` → sc_progul_ochny (HR-SC-PROGUL-OCHNY-01)\n\n**Перед импортом:**\n1. Создать Credential: Ollama API → Base URL: http://127.0.0.1:11434\n2. Заменить REPLACE_ME_OLLAMA на ID созданного credential\n3. Создать Credential: PostgreSQL → hr_assistant\n4. В lib_check_dates заменить REPLACE_ME на ID PostgreSQL credential\n\n**После импорта всех workflow** нажать Test Workflow и\nнаписать: \"Помоги оформить прогул\"",
+        "height": 340,
+        "width": 480,
+        "color": 4
       }
     },
     {
       "id": "chat-trigger",
       "name": "Чат с руководителем",
-      "type": "n8n-nodes-base.manualChatTrigger",
+      "type": "@n8n/n8n-nodes-langchain.chatTrigger",
       "typeVersion": 1.1,
-      "position": [180, 300],
-      "parameters": {}
+      "position": [0, 300],
+      "parameters": {
+        "options": {}
+      },
+      "webhookId": "hr-agent-chat-01"
     },
     {
       "id": "ai-agent",
-      "name": "HR-агент",
+      "name": "HR-ассистент",
       "type": "@n8n/n8n-nodes-langchain.agent",
       "typeVersion": 1.7,
-      "position": [460, 300],
+      "position": [240, 300],
       "parameters": {
-        "promptType": "define",
-        "text": "={{ $json.chatInput }}",
         "options": {
-          "systemMessage": "Ты — HR-ассистент для руководителей компании «Контур». Помогаешь оформить дисциплинарные документы строго по ТК РФ.\n\nЧТО УМЕЮ:\n- Проверить сроки привлечения к ответственности (ТК РФ ст.193)\n- Определить тип нарушения и собрать необходимые факты\n- Помочь оформить акт об отсутствии и служебную записку\n\nГРАНИЦА: работаю до передачи пакета документов эксперту. Решение о взыскании — только Черепанова Т. или Касмынина О. (эксперты кадрового учёта).\n\nПРАВИЛА:\n1. Никогда ничего не додумываю — только факты от руководителя\n2. Деловой тон, обращаюсь на «вы», краткие ответы\n3. Нестандартная ситуация → направляю к эксперту\n4. Нарушение ИБ / коммерческой тайны → только юр.служба и ОИБО, больше не помогаю\n\nАЛГОРИТМ:\n1. При первом обращении — поздоровайся и попроси описать ситуацию: что случилось, с кем, примерно когда.\n2. Как только руководитель называет нарушение и обе ключевые даты (дата нарушения + дата обнаружения) — СРАЗУ вызывай инструмент check_dates. Не жди дополнительных подтверждений.\n3. Если check_dates возвращает isExpired=true: сообщи что сроки истекли. Объясни по какому основанию (violation_date = прошло >5 мес. 15 дней с нарушения; discovery_date = прошло >20 дней с обнаружения). Предложи обратиться к Касмыниной О. или Черепановой Т.\n4. Если сроки в порядке — уточни тип нарушения (см. список ниже) и продолжи сбор фактуры для документов.\n5. Когда нужна справка по ТК РФ или ЛНА — вызывай get_rag_context с нужной темой ПЕРЕД тем как цитировать нормы.\n\nТЕМЫ для get_rag_context:\n- check_dates → сроки дисциплинарных взысканий (ст.193 ТК РФ)\n- progul → прогул (ст.81 п.6а ТК РФ)\n- ndo → неисполнение должностных обязанностей (ст.81 п.5 ТК РФ)\n- opyanenie → появление в состоянии опьянения (ст.81 п.6б ТК РФ)\n- ispytanie → испытательный срок (ст.71 ТК РФ)\n- ib_kt → нарушение ИБ / коммерческой тайны (→ юр.служба)\n- etika → нарушение этических норм (ЛНА Контура)\n- sz_structure → структура служебной записки",
-          "maxIterations": 10
+          "systemMessage": "Ты — HR-ассистент для руководителей компании Контур. Помогаешь оформить дисциплинарные документы: акт об отсутствии и служебную записку.\n\n## Твоя роль\n- Задаёшь вопросы и собираешь факты — не додумываешь ничего сам\n- Работаешь строго в рамках предоставленных данных\n- Граница: до передачи документов кадровому эксперту включительно\n- Если ситуация нестандартная — направляй к Касмыниной О. или Черепановой Т.\n\n## Алгоритм работы\n\n### Шаг 1. Приветствие и выяснение ситуации\nПоздоровайся и попроси описать ситуацию.\n\n### Шаг 2. Сбор данных о нарушении\nПоследовательно уточни (по одному вопросу за раз):\n1. ФИО сотрудника, должность, подразделение\n2. Дата отсутствия (формат ГГГГ-ММ-ДД)\n3. Когда обнаружено отсутствие (дата обнаружения)\n4. Время отсутствия (с ... по ...)\n5. Удалось ли связаться с сотрудником? Что выяснилось?\n6. Есть ли уважительная причина?\n7. Есть ли доказательства (скрины СКУД, переписка и т.д.)?\n8. ФИО и должность руководителя (если не очевидно)\n\n### Шаг 3. Проверка сроков\nКак только получены дата нарушения и дата обнаружения — вызови инструмент `check_dates`.\nЕсли срок истёк — сообщи руководителю, что привлечение невозможно, и завершай диалог.\n\n### Шаг 4. Суммаризация\nПерескажи собранные данные и спроси: «Всё верно? Готов сформировать документы?»\nЕсли есть правки — внеси и повтори.\n\n### Шаг 5. Генерация документов\nПосле подтверждения вызови инструмент `generate_documents`, передав JSON с данными:\n```\n{\n  \"scenario\": \"progul_ochny\",\n  \"employee\": { \"name\": \"...\", \"position\": \"...\", \"department\": \"...\" },\n  \"violation\": { \"date\": \"ГГГГ-ММ-ДД\", \"discoveryDate\": \"ГГГГ-ММ-ДД\", \"absenceStart\": \"ЧЧ:ММ\", \"absenceEnd\": \"ЧЧ:ММ\", \"description\": \"...\" },\n  \"respectableReason\": false,\n  \"respectableReasonComment\": \"\",\n  \"evidenceDescription\": \"...\",\n  \"contactAttempts\": \"...\",\n  \"manager\": { \"name\": \"...\", \"position\": \"...\" },\n  \"datesCheck\": { ... }\n}\n```\n\n### Шаг 6. Передача результата\nПокажи сгенерированные документы. Напомни: передать пакет Черепановой Т. или Касмыниной О.\n\n## Важные правила\n- Никогда не цитируй статьи ТК РФ по памяти — только то, что вернул инструмент\n- Не предлагай меры, выходящие за рамки чеклиста\n- Один вопрос за раз — не задавай несколько вопросов в одном сообщении\n- Если чего-то не знаешь — скажи прямо и уточни"
         }
       }
     },
@@ -46,91 +44,145 @@
       "name": "Ollama qwen2.5:7b",
       "type": "@n8n/n8n-nodes-langchain.lmOllama",
       "typeVersion": 1,
-      "position": [460, 520],
+      "position": [0, 520],
       "parameters": {
         "model": "qwen2.5:7b",
-        "options": {}
+        "options": {
+          "temperature": 0.3
+        }
       },
       "credentials": {
         "ollamaApi": {
           "id": "REPLACE_ME_OLLAMA",
-          "name": "Ollama (local 127.0.0.1)"
+          "name": "Ollama API"
         }
       }
     },
     {
       "id": "memory",
-      "name": "Память диалога (20 сообщений)",
+      "name": "Память диалога",
       "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
       "typeVersion": 1.3,
-      "position": [700, 520],
+      "position": [240, 520],
       "parameters": {
-        "contextWindowLength": 20
+        "contextWindowLength": 30
       }
     },
     {
       "id": "tool-check-dates",
-      "name": "check_dates",
+      "name": "Инструмент: check_dates",
       "type": "@n8n/n8n-nodes-langchain.toolWorkflow",
       "typeVersion": 1.3,
-      "position": [220, 520],
+      "position": [480, 520],
       "parameters": {
         "name": "check_dates",
-        "description": "Проверить, не истекли ли сроки привлечения к дисциплинарной ответственности по ТК РФ ст.193. Вызывать сразу как только известны дата нарушения и дата обнаружения. Возвращает: isExpired (true/false), expiredReason (violation_date | discovery_date | null), violationDeadline и discoveryDeadline (крайние даты в формате YYYY-MM-DD).",
-        "workflowId": {
-          "__rl": true,
-          "value": "HR-LIB-DATES-01",
-          "mode": "id"
-        },
-        "specifyInputSchema": true,
-        "inputSchema": "{\"type\":\"object\",\"properties\":{\"violationDate\":{\"type\":\"string\",\"description\":\"Дата нарушения (когда произошёл проступок) в формате YYYY-MM-DD\"},\"discoveryDate\":{\"type\":\"string\",\"description\":\"Дата обнаружения нарушения руководителем в формате YYYY-MM-DD\"}},\"required\":[\"violationDate\",\"discoveryDate\"]}"
+        "description": "Проверяет, не истекли ли сроки привлечения к дисциплинарной ответственности по ТК РФ ст.193. Вызывай сразу как получены дата нарушения и дата обнаружения.",
+        "workflowId": { "value": "HR-LIB-DATES-01", "mode": "id" },
+        "fields": {
+          "values": [
+            {
+              "name": "violationDate",
+              "description": "Дата нарушения (совершения проступка) в формате YYYY-MM-DD",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "discoveryDate",
+              "description": "Дата обнаружения нарушения в формате YYYY-MM-DD",
+              "type": "string",
+              "required": true
+            }
+          ]
+        }
       }
     },
     {
-      "id": "tool-rag-context",
-      "name": "get_rag_context",
+      "id": "tool-generate-docs",
+      "name": "Инструмент: generate_documents",
       "type": "@n8n/n8n-nodes-langchain.toolWorkflow",
       "typeVersion": 1.3,
-      "position": [-20, 520],
+      "position": [720, 520],
       "parameters": {
-        "name": "get_rag_context",
-        "description": "Получить выдержки из нормативно-правовых актов (НПА) по теме нарушения. Возвращает текст статей ТК РФ и внутренних ЛНА Контура. Использовать перед тем как давать пояснения по законодательству.",
-        "workflowId": {
-          "__rl": true,
-          "value": "HR-LIB-RAG-01",
-          "mode": "id"
-        },
-        "specifyInputSchema": true,
-        "inputSchema": "{\"type\":\"object\",\"properties\":{\"rag_topic\":{\"type\":\"string\",\"description\":\"Тема НПА. Допустимые значения: check_dates | progul | ndo | opyanenie | ispytanie | ib_kt | etika | sz_structure\"}},\"required\":[\"rag_topic\"]}"
+        "name": "generate_documents",
+        "description": "Генерирует пакет документов (акт об отсутствии + служебную записку) на основе собранных данных. Вызывай ТОЛЬКО после того как руководитель подтвердил корректность всех данных.",
+        "workflowId": { "value": "HR-SC-PROGUL-OCHNY-01", "mode": "id" },
+        "fields": {
+          "values": [
+            {
+              "name": "scenario",
+              "description": "Тип сценария: progul_ochny, progul_distant и т.д.",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "employee",
+              "description": "Данные сотрудника: { name, position, department }",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "violation",
+              "description": "Данные о нарушении: { date, discoveryDate, absenceStart, absenceEnd, description }",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "respectableReason",
+              "description": "Есть ли уважительная причина (true/false)",
+              "type": "boolean",
+              "required": false
+            },
+            {
+              "name": "respectableReasonComment",
+              "description": "Описание уважительной причины если есть",
+              "type": "string",
+              "required": false
+            },
+            {
+              "name": "evidenceDescription",
+              "description": "Описание доказательств (скрины, СКУД, переписка)",
+              "type": "string",
+              "required": false
+            },
+            {
+              "name": "contactAttempts",
+              "description": "Описание попыток связаться с сотрудником",
+              "type": "string",
+              "required": false
+            },
+            {
+              "name": "manager",
+              "description": "Данные руководителя: { name, position }",
+              "type": "string",
+              "required": false
+            },
+            {
+              "name": "datesCheck",
+              "description": "Результат проверки сроков от check_dates",
+              "type": "string",
+              "required": false
+            }
+          ]
+        }
       }
     }
   ],
   "connections": {
     "Чат с руководителем": {
-      "main": [
-        [{"node": "HR-агент", "type": "main", "index": 0}]
-      ]
+      "main": [[{ "node": "HR-ассистент", "type": "main", "index": 0 }]]
     },
     "Ollama qwen2.5:7b": {
-      "ai_languageModel": [
-        [{"node": "HR-агент", "type": "ai_languageModel", "index": 0}]
-      ]
+      "ai_languageModel": [[{ "node": "HR-ассистент", "type": "ai_languageModel", "index": 0 }]]
     },
-    "Память диалога (20 сообщений)": {
-      "ai_memory": [
-        [{"node": "HR-агент", "type": "ai_memory", "index": 0}]
-      ]
+    "Память диалога": {
+      "ai_memory": [[{ "node": "HR-ассистент", "type": "ai_memory", "index": 0 }]]
     },
-    "check_dates": {
-      "ai_tool": [
-        [{"node": "HR-агент", "type": "ai_tool", "index": 0}]
-      ]
+    "Инструмент: check_dates": {
+      "ai_tool": [[{ "node": "HR-ассистент", "type": "ai_tool", "index": 0 }]]
     },
-    "get_rag_context": {
-      "ai_tool": [
-        [{"node": "HR-агент", "type": "ai_tool", "index": 0}]
-      ]
+    "Инструмент: generate_documents": {
+      "ai_tool": [[{ "node": "HR-ассистент", "type": "ai_tool", "index": 1 }]]
     }
   },
-  "id": "HR-MAIN-AGENT-01"
+  "id": "HR-MAIN-AGENT-02"
 }

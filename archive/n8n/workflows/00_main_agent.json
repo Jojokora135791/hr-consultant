@@ -1,0 +1,136 @@
+{
+  "name": "HR-ассистент (AI Agent)",
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "nodes": [
+    {
+      "id": "sticky-main",
+      "name": "📌 Главный агент — архитектура v2",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [-280, -220],
+      "parameters": {
+        "content": "## HR-ассистент v2 — AI Agent\n\n**Архитектура:** Chat Trigger → AI Agent (qwen2.5:7b) + инструменты\n\n**Инструменты:**\n- `check_dates` — проверка сроков ТК РФ ст.193 → вызывает lib_check_dates\n- `get_rag_context` — справка по НПА → вызывает lib_rag_context\n\n**Память:** Window Buffer Memory (20 последних сообщений)\n\n**Что изменилось от v1:**\n- Нет жёсткой state machine\n- Нет PostgreSQL для сессий\n- LLM сам управляет диалогом\n- 00_router, lib_session, lib_llm_call упразднены → archive/\n\n**Как настроить:**\n1. Создать credential Ollama API (Base URL: http://127.0.0.1:11434)\n2. Заменить REPLACE_ME_OLLAMA на ID созданного credential\n3. Убедиться что lib_check_dates и lib_rag_context импортированы\n4. Активировать этот workflow",
+        "height": 380,
+        "width": 600,
+        "color": 3
+      }
+    },
+    {
+      "id": "chat-trigger",
+      "name": "Чат с руководителем",
+      "type": "n8n-nodes-base.manualChatTrigger",
+      "typeVersion": 1.1,
+      "position": [180, 300],
+      "parameters": {}
+    },
+    {
+      "id": "ai-agent",
+      "name": "HR-агент",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.7,
+      "position": [460, 300],
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.chatInput }}",
+        "options": {
+          "systemMessage": "Ты — HR-ассистент для руководителей компании «Контур». Помогаешь оформить дисциплинарные документы строго по ТК РФ.\n\nЧТО УМЕЮ:\n- Проверить сроки привлечения к ответственности (ТК РФ ст.193)\n- Определить тип нарушения и собрать необходимые факты\n- Помочь оформить акт об отсутствии и служебную записку\n\nГРАНИЦА: работаю до передачи пакета документов эксперту. Решение о взыскании — только Черепанова Т. или Касмынина О. (эксперты кадрового учёта).\n\nПРАВИЛА:\n1. Никогда ничего не додумываю — только факты от руководителя\n2. Деловой тон, обращаюсь на «вы», краткие ответы\n3. Нестандартная ситуация → направляю к эксперту\n4. Нарушение ИБ / коммерческой тайны → только юр.служба и ОИБО, больше не помогаю\n\nАЛГОРИТМ:\n1. При первом обращении — поздоровайся и попроси описать ситуацию: что случилось, с кем, примерно когда.\n2. Как только руководитель называет нарушение и обе ключевые даты (дата нарушения + дата обнаружения) — СРАЗУ вызывай инструмент check_dates. Не жди дополнительных подтверждений.\n3. Если check_dates возвращает isExpired=true: сообщи что сроки истекли. Объясни по какому основанию (violation_date = прошло >5 мес. 15 дней с нарушения; discovery_date = прошло >20 дней с обнаружения). Предложи обратиться к Касмыниной О. или Черепановой Т.\n4. Если сроки в порядке — уточни тип нарушения (см. список ниже) и продолжи сбор фактуры для документов.\n5. Когда нужна справка по ТК РФ или ЛНА — вызывай get_rag_context с нужной темой ПЕРЕД тем как цитировать нормы.\n\nТЕМЫ для get_rag_context:\n- check_dates → сроки дисциплинарных взысканий (ст.193 ТК РФ)\n- progul → прогул (ст.81 п.6а ТК РФ)\n- ndo → неисполнение должностных обязанностей (ст.81 п.5 ТК РФ)\n- opyanenie → появление в состоянии опьянения (ст.81 п.6б ТК РФ)\n- ispytanie → испытательный срок (ст.71 ТК РФ)\n- ib_kt → нарушение ИБ / коммерческой тайны (→ юр.служба)\n- etika → нарушение этических норм (ЛНА Контура)\n- sz_structure → структура служебной записки",
+          "maxIterations": 10
+        }
+      }
+    },
+    {
+      "id": "ollama-llm",
+      "name": "Ollama qwen2.5:7b",
+      "type": "@n8n/n8n-nodes-langchain.lmOllama",
+      "typeVersion": 1,
+      "position": [460, 520],
+      "parameters": {
+        "model": "qwen2.5:7b",
+        "options": {}
+      },
+      "credentials": {
+        "ollamaApi": {
+          "id": "REPLACE_ME_OLLAMA",
+          "name": "Ollama (local 127.0.0.1)"
+        }
+      }
+    },
+    {
+      "id": "memory",
+      "name": "Память диалога (20 сообщений)",
+      "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
+      "typeVersion": 1.3,
+      "position": [700, 520],
+      "parameters": {
+        "contextWindowLength": 20
+      }
+    },
+    {
+      "id": "tool-check-dates",
+      "name": "check_dates",
+      "type": "@n8n/n8n-nodes-langchain.toolWorkflow",
+      "typeVersion": 1.3,
+      "position": [220, 520],
+      "parameters": {
+        "name": "check_dates",
+        "description": "Проверить, не истекли ли сроки привлечения к дисциплинарной ответственности по ТК РФ ст.193. Вызывать сразу как только известны дата нарушения и дата обнаружения. Возвращает: isExpired (true/false), expiredReason (violation_date | discovery_date | null), violationDeadline и discoveryDeadline (крайние даты в формате YYYY-MM-DD).",
+        "workflowId": {
+          "__rl": true,
+          "value": "HR-LIB-DATES-01",
+          "mode": "id"
+        },
+        "specifyInputSchema": true,
+        "inputSchema": "{\"type\":\"object\",\"properties\":{\"violationDate\":{\"type\":\"string\",\"description\":\"Дата нарушения (когда произошёл проступок) в формате YYYY-MM-DD\"},\"discoveryDate\":{\"type\":\"string\",\"description\":\"Дата обнаружения нарушения руководителем в формате YYYY-MM-DD\"}},\"required\":[\"violationDate\",\"discoveryDate\"]}"
+      }
+    },
+    {
+      "id": "tool-rag-context",
+      "name": "get_rag_context",
+      "type": "@n8n/n8n-nodes-langchain.toolWorkflow",
+      "typeVersion": 1.3,
+      "position": [-20, 520],
+      "parameters": {
+        "name": "get_rag_context",
+        "description": "Получить выдержки из нормативно-правовых актов (НПА) по теме нарушения. Возвращает текст статей ТК РФ и внутренних ЛНА Контура. Использовать перед тем как давать пояснения по законодательству.",
+        "workflowId": {
+          "__rl": true,
+          "value": "HR-LIB-RAG-01",
+          "mode": "id"
+        },
+        "specifyInputSchema": true,
+        "inputSchema": "{\"type\":\"object\",\"properties\":{\"rag_topic\":{\"type\":\"string\",\"description\":\"Тема НПА. Допустимые значения: check_dates | progul | ndo | opyanenie | ispytanie | ib_kt | etika | sz_structure\"}},\"required\":[\"rag_topic\"]}"
+      }
+    }
+  ],
+  "connections": {
+    "Чат с руководителем": {
+      "main": [
+        [{"node": "HR-агент", "type": "main", "index": 0}]
+      ]
+    },
+    "Ollama qwen2.5:7b": {
+      "ai_languageModel": [
+        [{"node": "HR-агент", "type": "ai_languageModel", "index": 0}]
+      ]
+    },
+    "Память диалога (20 сообщений)": {
+      "ai_memory": [
+        [{"node": "HR-агент", "type": "ai_memory", "index": 0}]
+      ]
+    },
+    "check_dates": {
+      "ai_tool": [
+        [{"node": "HR-агент", "type": "ai_tool", "index": 0}]
+      ]
+    },
+    "get_rag_context": {
+      "ai_tool": [
+        [{"node": "HR-агент", "type": "ai_tool", "index": 0}]
+      ]
+    }
+  },
+  "id": "HR-MAIN-AGENT-01"
+}

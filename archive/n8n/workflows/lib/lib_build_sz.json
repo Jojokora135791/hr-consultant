@@ -1,0 +1,252 @@
+{
+  "name": "LIB: составить служебную записку",
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "nodes": [
+    {
+      "id": "sticky-sz",
+      "name": "📌 Что делает этот sub-workflow",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -200,
+        -200
+      ],
+      "parameters": {
+        "content": "## LIB: составить служебную записку\n\n**Вход:** `{ context, history, sessionId, userMessage }`\n- `context` — весь накопленный контекст сессии (JSONB из sessions)\n- `history` — история диалога\n- `userMessage` — текущее сообщение пользователя\n\n**Этапы:**\n1. BUILD_SZ_COLLECT — LLM запрашивает недостающие данные\n2. BUILD_SZ_GENERATE — LLM генерирует текст СЗ по шаблону\n   (переход когда context содержит все обязательные поля)\n\n**Выход:** `{ output, newState }`\n- `newState`: 'BUILD_SZ' (ждём данные) | 'DONE' (СЗ готова)\n\nИспользуется во ВСЕХ сценариях одинаково.",
+        "height": 340,
+        "width": 500,
+        "color": 5
+      }
+    },
+    {
+      "id": "sz-trigger",
+      "name": "Вызов из другого workflow",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        0,
+        300
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "sz-check-ready",
+      "name": "Проверить: все данные для СЗ собраны?",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        300
+      ],
+      "parameters": {
+        "jsCode": "const { context, history, sessionId, userMessage } = $input.first().json;\n// Обязательные поля для составления СЗ\nconst required = ['violation_date', 'employee_name', 'employee_position', 'manager_name', 'manager_position', 'prior_behavior', 'contact_attempts', 'consequences'];\nconst missing = required.filter(k => !context[k]);\nconst isReady = missing.length === 0;\nreturn [{ json: { context, history, sessionId, userMessage, isReady, missing } }];"
+      }
+    },
+    {
+      "id": "sz-if-ready",
+      "name": "Все данные есть?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        440,
+        300
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {},
+          "conditions": [
+            {
+              "leftValue": "={{ $json.isReady }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "sz-generate-prompt",
+      "name": "ГЕНЕРАЦИЯ СЗ: сформировать промпт",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        660,
+        160
+      ],
+      "parameters": {
+        "jsCode": "const { context, history, sessionId, userMessage } = $input.first().json;\nconst today = new Date().toLocaleDateString('ru-RU');\nconst systemPrompt = `Ты — HR-ассистент. Составь служебную записку о дисциплинарном нарушении.\nСТРОГО только факты из данных ниже — ничего не додумывай, не предполагай.\nЕсли данных не хватает — пиши [УТОЧНИТЬ].\n\nДанные:\n${JSON.stringify(context, null, 2)}\n\nДата составления: ${today}\n\nСтруктура служебной записки:\n1. Шапка: кому, от кого, организация, дата\n2. Факт нарушения: что / когда точно / где / кто\n3. Обстоятельства нарушения\n4. Предшествующее поведение сотрудника\n5. Каналы связи (попытки выяснить причины)\n6. Нарушенные НПА\n7. Негативные последствия\n8. Просьба провести проверку\n9. Приложения`;\nconst messages = [\n  { role: 'system', content: systemPrompt },\n  ...history,\n  { role: 'user', content: 'Составь служебную записку на основе собранных данных.' }\n];\nreturn [{ json: { messages, sessionId, userMessage, context, generateMode: true } }];"
+      }
+    },
+    {
+      "id": "sz-generate-llm",
+      "name": "ГЕНЕРАЦИЯ СЗ: вызвать LLM",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        880,
+        160
+      ],
+      "parameters": {
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "value": "HR-LIB-LLM-01",
+          "mode": "id"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "sz-generate-return",
+      "name": "ГЕНЕРАЦИЯ СЗ: вернуть результат",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1100,
+        160
+      ],
+      "parameters": {
+        "jsCode": "const llmResult = $input.first().json;\nconst szText = llmResult.response || '';\nreturn [{ json: {\n  output: `Служебная записка готова:\\n\\n${szText}\\n\\nПередайте пакет документов (акт + СЗ) эксперту кадрового учёта — Черепановой Т. или Касмыниной О.`,\n  newState: 'DONE'\n} }];"
+      }
+    },
+    {
+      "id": "sz-collect-prompt",
+      "name": "СБОР ДАННЫХ: сформировать промпт",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        660,
+        440
+      ],
+      "parameters": {
+        "jsCode": "const { context, history, sessionId, userMessage, missing } = $input.first().json;\nconst missingLabels = {\n  violation_date: 'дата нарушения',\n  employee_name: 'ФИО сотрудника',\n  employee_position: 'должность сотрудника',\n  manager_name: 'ФИО руководителя (ваше ФИО)',\n  manager_position: 'должность руководителя',\n  prior_behavior: 'предшествующее поведение сотрудника',\n  contact_attempts: 'попытки связаться с сотрудником',\n  consequences: 'последствия для подразделения'\n};\nconst missingText = missing.map(k => missingLabels[k] || k).join(', ');\nconst systemPrompt = `Ты — HR-ассистент. Составляем служебную записку о дисциплинарном нарушении.\n\nУже известно:\n${JSON.stringify(context, null, 2)}\n\nДля составления СЗ ещё не хватает: ${missingText}.\n\nЗапроси недостающие данные у руководителя. Задавай вопросы по одному, не засыпай сразу всем.\nТолько факты — ничего не додумывай.\n\nКогда руководитель называет конкретные данные — добавь в конец ответа ОТДЕЛЬНОЙ строкой:\nDATA_UPDATE: {\"field_name\": \"value\"}\nГде field_name — название поля из: prior_behavior, contact_attempts, consequences, employee_name, employee_position, manager_name, manager_position.\nЕсли данных несколько — перечисли все поля в одном объекте.\nЕсли новых данных нет — не добавляй DATA_UPDATE.`;\nconst messages = [\n  { role: 'system', content: systemPrompt },\n  ...history,\n  { role: 'user', content: userMessage }\n];\nreturn [{ json: { messages, sessionId, userMessage, context } }];"
+      }
+    },
+    {
+      "id": "sz-collect-llm",
+      "name": "СБОР ДАННЫХ: вызвать LLM",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        880,
+        440
+      ],
+      "parameters": {
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "value": "HR-LIB-LLM-01",
+          "mode": "id"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "sz-collect-extract",
+      "name": "СБОР ДАННЫХ: извлечь новые данные из ответа",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1100,
+        440
+      ],
+      "parameters": {
+        "jsCode": "const llmResult = $input.first().json;\nconst prev = $('СБОР ДАННЫХ: сформировать промпт').item.json;\n// Ищем DATA_UPDATE маркер (LLM должен добавить если распознал данные)\nconst responseText = llmResult.response || '';\nlet contextUpdate = {};\nconst dataMatch = responseText.match(/DATA_UPDATE:\\s*(\\{[^}]+\\})/);\nif (dataMatch) {\n  try { contextUpdate = JSON.parse(dataMatch[1]); } catch(e) {}\n}\nconst cleanResponse = responseText.replace(/DATA_UPDATE:[\\s\\S]*$/, '').trim();\nreturn [{ json: {\n  output: cleanResponse,\n  newState: 'BUILD_SZ',\n  contextUpdate\n} }];"
+      }
+    }
+  ],
+  "connections": {
+    "Вызов из другого workflow": {
+      "main": [
+        [
+          {
+            "node": "Проверить: все данные для СЗ собраны?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Проверить: все данные для СЗ собраны?": {
+      "main": [
+        [
+          {
+            "node": "Все данные есть?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Все данные есть?": {
+      "main": [
+        [
+          {
+            "node": "ГЕНЕРАЦИЯ СЗ: сформировать промпт",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "СБОР ДАННЫХ: сформировать промпт",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ГЕНЕРАЦИЯ СЗ: сформировать промпт": {
+      "main": [
+        [
+          {
+            "node": "ГЕНЕРАЦИЯ СЗ: вызвать LLM",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ГЕНЕРАЦИЯ СЗ: вызвать LLM": {
+      "main": [
+        [
+          {
+            "node": "ГЕНЕРАЦИЯ СЗ: вернуть результат",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "СБОР ДАННЫХ: сформировать промпт": {
+      "main": [
+        [
+          {
+            "node": "СБОР ДАННЫХ: вызвать LLM",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "СБОР ДАННЫХ: вызвать LLM": {
+      "main": [
+        [
+          {
+            "node": "СБОР ДАННЫХ: извлечь новые данные из ответа",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "id": "HR-LIB-SZ-01"
+}

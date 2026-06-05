@@ -1,0 +1,154 @@
+{
+  "name": "SC: Прогул офисник — генерация документов",
+  "active": false,
+  "settings": { "executionOrder": "v1" },
+  "nodes": [
+    {
+      "id": "sticky-sc",
+      "name": "📌 Сценарий: Прогул (офисник)",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [-200, -220],
+      "parameters": {
+        "content": "## SC: Прогул офисник\n\n**Вызывается из:** 00_main_agent как tool `generate_documents`\n\n**Вход (через toolWorkflow → $json.query):**\n```json\n{\n  \"scenario\": \"progul_ochny\",\n  \"employee\": { \"name\", \"position\", \"department\" },\n  \"violation\": { \"date\", \"discoveryDate\", \"absenceStart\", \"absenceEnd\" },\n  \"respectableReason\": false,\n  \"respectableReasonComment\": \"\",\n  \"evidenceDescription\": \"...\",\n  \"contactAttempts\": \"...\",\n  \"manager\": { \"name\", \"position\" },\n  \"datesCheck\": { \"isExpired\", \"violationDeadline\", \"discoveryDeadline\" }\n}\n```\n\n**Выход:** текст акта + текст СЗ\n\n**Переиспользуемые блоки:**\n- lib_rag (HR-LIB-RAG-02)\n- lib_build_act (HR-LIB-BUILD-ACT-01)\n- lib_build_sz (HR-LIB-BUILD-SZ-01)\n\n**Контент из файлов (не захардкожен):**\n- knowledge/progul_checklist.md\n- knowledge/progul_tk193.md\n- templates/act_progul.md\n- templates/sz_progul.md",
+        "height": 420,
+        "width": 520,
+        "color": 3
+      }
+    },
+    {
+      "id": "sc-trigger",
+      "name": "Вызов из другого workflow",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [0, 400],
+      "parameters": {}
+    },
+    {
+      "id": "sc-normalize",
+      "name": "Нормализовать входные данные",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [220, 400],
+      "parameters": {
+        "jsCode": "const raw = $input.first().json;\nlet data = raw;\nif (raw.query && typeof raw.query === 'object' && !Array.isArray(raw.query)) {\n  data = raw.query;\n} else if (typeof raw.input === 'string') {\n  try { data = JSON.parse(raw.input); } catch(e) {}\n} else if (typeof raw.query === 'string') {\n  try { data = JSON.parse(raw.query); } catch(e) {}\n}\nif (!data.employee) throw new Error('sc_progul_ochny: не переданы данные employee.');\nif (!data.violation) throw new Error('sc_progul_ochny: не переданы данные violation.');\n// Проставить scenario если не передан\ndata.scenario = data.scenario || 'progul_ochny';\nreturn [{ json: { context: data } }];"
+      }
+    },
+    {
+      "id": "sc-read-knowledge",
+      "name": "Прочитать чеклист и ТК",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [440, 400],
+      "parameters": {
+        "jsCode": "const fs = require('fs');\nconst base = process.env.HR_KNOWLEDGE_DIR\n  || '/Users/olegkluev/Documents/Projects/hr-consultant/knowledge';\nconst checklist = fs.readFileSync(`${base}/progul_checklist.md`, 'utf8');\nconst tk = fs.readFileSync(`${base}/progul_tk193.md`, 'utf8');\nconst d = $input.first().json;\nreturn [{ json: { ...d, checklist_content: checklist, tk_content: tk } }];"
+      }
+    },
+    {
+      "id": "sc-vision-stub",
+      "name": "Vision: анализ доказательств (заглушка)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [660, 400],
+      "parameters": {
+        "jsCode": "// VISION STUB v1 — TODO: заменить на HTTP Request к vision-модели Ollama (qwen2-vl / llava)\n// Интерфейс: принимает evidenceDescription, возвращает { vision_stub, analysis }\n// При замене: убрать этот нод, добавить HTTP Request к http://127.0.0.1:11434/api/generate\n// с моделью qwen2-vl и base64-изображением в поле images[]\nconst d = $input.first().json;\nconst desc = d.context?.evidenceDescription || 'Доказательства не предоставлены';\nreturn [{ json: {\n  ...d,\n  vision_analysis: {\n    vision_stub: true,\n    analysis: desc,\n    _note: 'STUB: заменить на реальную vision-модель'\n  }\n} }];"
+      }
+    },
+    {
+      "id": "sc-call-rag",
+      "name": "Вызов lib_rag",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.1,
+      "position": [880, 400],
+      "parameters": {
+        "workflowId": { "value": "HR-LIB-RAG-02", "mode": "id" },
+        "options": { "waitForSubWorkflow": true },
+        "inputData": "={{ JSON.stringify({ context: $json.context, checklist_content: $json.checklist_content, tk_content: $json.tk_content }) }}"
+      }
+    },
+    {
+      "id": "sc-merge-rag",
+      "name": "Добавить violations в контекст",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1100, 400],
+      "parameters": {
+        "jsCode": "// Результат lib_rag приходит в $input.first().json\n// Данные из предыдущих нодов нужно получить через $('Вызов lib_rag').first() — нет, только через merge\n// Используем глобальный $('нод')  \nconst ragResult = $input.first().json;\nconst violations = ragResult.violations || '[Не удалось сформулировать нарушение]';\n// Восстанавливаем полный контекст из предыдущего нода через $node\nconst prev = $('Vision: анализ доказательств (заглушка)').first().json;\nreturn [{ json: {\n  context: prev.context,\n  checklist_content: prev.checklist_content,\n  tk_content: prev.tk_content,\n  vision_analysis: prev.vision_analysis,\n  violations\n} }];"
+      }
+    },
+    {
+      "id": "sc-call-build-act",
+      "name": "Вызов lib_build_act",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.1,
+      "position": [1320, 400],
+      "parameters": {
+        "workflowId": { "value": "HR-LIB-BUILD-ACT-01", "mode": "id" },
+        "options": { "waitForSubWorkflow": true },
+        "inputData": "={{ JSON.stringify({ context: $json.context, violations: $json.violations, vision_analysis: $json.vision_analysis }) }}"
+      }
+    },
+    {
+      "id": "sc-merge-act",
+      "name": "Добавить act_text в контекст",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1540, 400],
+      "parameters": {
+        "jsCode": "const actResult = $input.first().json;\nconst act_text = actResult.act_text || '[Не удалось сгенерировать акт]';\nconst prev = $('Добавить violations в контекст').first().json;\nreturn [{ json: {\n  context: prev.context,\n  violations: prev.violations,\n  vision_analysis: prev.vision_analysis,\n  act_text\n} }];"
+      }
+    },
+    {
+      "id": "sc-call-build-sz",
+      "name": "Вызов lib_build_sz",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.1,
+      "position": [1760, 400],
+      "parameters": {
+        "workflowId": { "value": "HR-LIB-BUILD-SZ-01", "mode": "id" },
+        "options": { "waitForSubWorkflow": true },
+        "inputData": "={{ JSON.stringify({ context: $json.context, violations: $json.violations, act_text: $json.act_text, vision_analysis: $json.vision_analysis }) }}"
+      }
+    },
+    {
+      "id": "sc-final-output",
+      "name": "Собрать финальный ответ",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1980, 400],
+      "parameters": {
+        "jsCode": "const szResult = $input.first().json;\nconst sz_text = szResult.sz_text || '[Не удалось сгенерировать служебную записку]';\nconst prev = $('Добавить act_text в контекст').first().json;\n\nconst output = `✅ Документы сформированы!\n\n---\n\n📋 АКТ ОБ ОТСУТСТВИИ НА РАБОЧЕМ МЕСТЕ\n\n${prev.act_text}\n\n---\n\n📝 СЛУЖЕБНАЯ ЗАПИСКА\n\n${sz_text}\n\n---\n\n⚠️ Проверьте документы перед отправкой. Поля [УТОЧНИТЬ] требуют вашего заполнения.\nПосле проверки — передайте пакет Черепановой Т. или Касмыниной О.`;\n\nreturn [{ json: { output, act_text: prev.act_text, sz_text } }];"
+      }
+    }
+  ],
+  "connections": {
+    "Вызов из другого workflow": {
+      "main": [[{ "node": "Нормализовать входные данные", "type": "main", "index": 0 }]]
+    },
+    "Нормализовать входные данные": {
+      "main": [[{ "node": "Прочитать чеклист и ТК", "type": "main", "index": 0 }]]
+    },
+    "Прочитать чеклист и ТК": {
+      "main": [[{ "node": "Vision: анализ доказательств (заглушка)", "type": "main", "index": 0 }]]
+    },
+    "Vision: анализ доказательств (заглушка)": {
+      "main": [[{ "node": "Вызов lib_rag", "type": "main", "index": 0 }]]
+    },
+    "Вызов lib_rag": {
+      "main": [[{ "node": "Добавить violations в контекст", "type": "main", "index": 0 }]]
+    },
+    "Добавить violations в контекст": {
+      "main": [[{ "node": "Вызов lib_build_act", "type": "main", "index": 0 }]]
+    },
+    "Вызов lib_build_act": {
+      "main": [[{ "node": "Добавить act_text в контекст", "type": "main", "index": 0 }]]
+    },
+    "Добавить act_text в контекст": {
+      "main": [[{ "node": "Вызов lib_build_sz", "type": "main", "index": 0 }]]
+    },
+    "Вызов lib_build_sz": {
+      "main": [[{ "node": "Собрать финальный ответ", "type": "main", "index": 0 }]]
+    }
+  },
+  "id": "HR-SC-PROGUL-OCHNY-01"
+}

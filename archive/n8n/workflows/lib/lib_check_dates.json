@@ -1,0 +1,86 @@
+{
+  "name": "LIB: проверка сроков по ТК РФ ст.193",
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "nodes": [
+    {
+      "id": "sticky-dates",
+      "name": "📌 Что делает этот sub-workflow",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [-200, -160],
+      "parameters": {
+        "content": "## LIB: проверка сроков ТК РФ ст.193\n\n**Вход:** `{ violationDate, discoveryDate }` (строки YYYY-MM-DD)\nПринимает как прямые поля `$json`, так и вложенные в `$json.query` (toolWorkflow из AI Agent).\n\n**Логика (ТК РФ ст.193):**\n- Нарушение: текущая дата ≤ дата нарушения + 5 мес. 15 дней\n- Обнаружение: текущая дата ≤ дата обнаружения + 20 кал. дней\nОба условия должны выполняться.\n\n**Выход:** `{ isExpired, expiredReason, violationDeadline, discoveryDeadline }`\n- `isExpired`: true/false\n- `expiredReason`: 'violation_date' | 'discovery_date' | null\n- `*Deadline`: строки дат — крайние сроки\n\n⚠️ Буфер: 5м15д вместо 6м, 20д вместо 30д — внутреннее решение, не ТК РФ. Уточнить у Касмыниной О.",
+        "height": 320,
+        "width": 520,
+        "color": 5
+      }
+    },
+    {
+      "id": "dates-trigger",
+      "name": "Вызов из другого workflow",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [0, 300],
+      "parameters": {}
+    },
+    {
+      "id": "dates-normalize",
+      "name": "Нормализовать входные данные",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [220, 300],
+      "parameters": {
+        "jsCode": "const raw = $input.first().json;\n// toolWorkflow (AI Agent) передаёт параметры в $json.query\n// executeWorkflow передаёт напрямую в $json\nlet data = raw;\nif (raw.query && typeof raw.query === 'object' && !Array.isArray(raw.query)) {\n  data = raw.query;\n} else if (typeof raw.input === 'string') {\n  try { data = JSON.parse(raw.input); } catch(e) {}\n} else if (typeof raw.query === 'string') {\n  try { data = JSON.parse(raw.query); } catch(e) {}\n}\nconst violationDate = data.violationDate || data.violation_date || null;\nconst discoveryDate = data.discoveryDate || data.discovery_date || null;\nif (!violationDate || !discoveryDate) {\n  throw new Error('check_dates: не переданы обязательные параметры violationDate и discoveryDate. Получено: ' + JSON.stringify(raw));\n}\nreturn [{ json: { violationDate, discoveryDate } }];"
+      }
+    },
+    {
+      "id": "dates-check",
+      "name": "PostgreSQL: проверить сроки по ТК РФ ст.193",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [440, 300],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT CASE WHEN CURRENT_DATE >= '{{ $json.violationDate }}'::date + INTERVAL '5 months 15 days' THEN true WHEN CURRENT_DATE >= '{{ $json.discoveryDate }}'::date + INTERVAL '20 days' THEN true ELSE false END AS is_expired, CASE WHEN CURRENT_DATE >= '{{ $json.violationDate }}'::date + INTERVAL '5 months 15 days' THEN 'violation_date' WHEN CURRENT_DATE >= '{{ $json.discoveryDate }}'::date + INTERVAL '20 days' THEN 'discovery_date' ELSE null END AS expired_reason, ('{{ $json.violationDate }}'::date + INTERVAL '5 months 15 days')::text AS violation_deadline, ('{{ $json.discoveryDate }}'::date + INTERVAL '20 days')::text AS discovery_deadline",
+        "options": {}
+      },
+      "credentials": {
+        "postgres": {
+          "id": "REPLACE_ME",
+          "name": "hr_assistant PostgreSQL"
+        }
+      }
+    },
+    {
+      "id": "dates-format",
+      "name": "Привести результат к единому формату",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [660, 300],
+      "parameters": {
+        "jsCode": "const r = $input.first().json;\nreturn [{ json: {\n  isExpired: r.is_expired === true || r.is_expired === 'true',\n  expiredReason: r.expired_reason || null,\n  violationDeadline: r.violation_deadline,\n  discoveryDeadline: r.discovery_deadline\n} }];"
+      }
+    }
+  ],
+  "connections": {
+    "Вызов из другого workflow": {
+      "main": [
+        [{"node": "Нормализовать входные данные", "type": "main", "index": 0}]
+      ]
+    },
+    "Нормализовать входные данные": {
+      "main": [
+        [{"node": "PostgreSQL: проверить сроки по ТК РФ ст.193", "type": "main", "index": 0}]
+      ]
+    },
+    "PostgreSQL: проверить сроки по ТК РФ ст.193": {
+      "main": [
+        [{"node": "Привести результат к единому формату", "type": "main", "index": 0}]
+      ]
+    }
+  },
+  "id": "HR-LIB-DATES-01"
+}

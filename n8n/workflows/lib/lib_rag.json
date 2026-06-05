@@ -1,0 +1,93 @@
+{
+  "name": "LIB: RAG — формулировка нарушений",
+  "active": false,
+  "settings": { "executionOrder": "v1" },
+  "nodes": [
+    {
+      "id": "sticky-rag",
+      "name": "📌 Что делает этот sub-workflow",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [-200, -180],
+      "parameters": {
+        "content": "## LIB: RAG — формулировка нарушений\n\n**Вход:** `{ context, checklist_content, tk_content }`\n- `context` — объект с данными о нарушении и сотруднике\n- `checklist_content` — текст чеклиста из knowledge/\n- `tk_content` — текст статьи ТК из knowledge/\n\n**Логика:**\nLLM анализирует чеклист и ТК, формулирует нарушения со ссылками на нормативку.\n\n**Выход:** `{ violations }` — строка с формулировкой нарушений\n\n⚠️ Не содержит захардкоженных статей — всё из checklist_content и tk_content.",
+        "height": 280,
+        "width": 480,
+        "color": 5
+      }
+    },
+    {
+      "id": "rag-trigger",
+      "name": "Вызов из другого workflow",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [0, 300],
+      "parameters": {}
+    },
+    {
+      "id": "rag-normalize",
+      "name": "Нормализовать входные данные",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [220, 300],
+      "parameters": {
+        "jsCode": "const raw = $input.first().json;\nlet data = raw;\nif (raw.query && typeof raw.query === 'object' && !Array.isArray(raw.query)) {\n  data = raw.query;\n} else if (typeof raw.input === 'string') {\n  try { data = JSON.parse(raw.input); } catch(e) {}\n} else if (typeof raw.query === 'string') {\n  try { data = JSON.parse(raw.query); } catch(e) {}\n}\nif (!data.context) throw new Error('lib_rag: не передан context. Получено: ' + JSON.stringify(raw));\nif (!data.checklist_content) throw new Error('lib_rag: не передан checklist_content.');\nif (!data.tk_content) throw new Error('lib_rag: не передан tk_content.');\nreturn [{ json: data }];"
+      }
+    },
+    {
+      "id": "rag-llm-prompt",
+      "name": "Подготовить промпт для LLM",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [440, 300],
+      "parameters": {
+        "jsCode": "const d = $input.first().json;\nconst ctx = d.context;\n\nconst prompt = `Ты — юридический ассистент по трудовому праву. Твоя задача — кратко и точно сформулировать нарушение трудовых обязанностей со ссылками на нормативные акты.\n\n## Данные о нарушении\nСотрудник: ${ctx.employee?.name || '[не указано]'}\nДолжность: ${ctx.employee?.position || '[не указано]'}\nПодразделение: ${ctx.employee?.department || '[не указано]'}\nДата нарушения: ${ctx.violation?.date || '[не указано]'}\nОписание: ${ctx.violation?.description || 'Прогул — отсутствие на рабочем месте без уважительной причины'}\nУважительная причина: ${ctx.respectableReason ? 'Есть: ' + ctx.respectableReasonComment : 'Отсутствует'}\n\n## Чеклист (внутренняя инструкция)\n${d.checklist_content}\n\n## Нормативная база\n${d.tk_content}\n\n## Задача\nСформулируй нарушение в 2-4 предложениях для включения в служебную записку. Укажи конкретные статьи, пункты. Формат: юридически грамотно, сухо, без лишних слов.\nОтвечай ТОЛЬКО формулировкой нарушения, без вводных фраз.`;\n\nreturn [{ json: { prompt, context: ctx } }];"
+      }
+    },
+    {
+      "id": "rag-ollama",
+      "name": "Ollama: сформулировать нарушения",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [660, 300],
+      "parameters": {
+        "method": "POST",
+        "url": "http://127.0.0.1:11434/api/generate",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            { "name": "model", "value": "qwen2.5:7b" },
+            { "name": "prompt", "value": "={{ $json.prompt }}" },
+            { "name": "stream", "value": false }
+          ]
+        },
+        "options": { "timeout": 60000 }
+      }
+    },
+    {
+      "id": "rag-format",
+      "name": "Привести к единому формату",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [880, 300],
+      "parameters": {
+        "jsCode": "const r = $input.first().json;\nconst violations = r.response?.trim() || '[Не удалось сформулировать нарушение]';\nreturn [{ json: { violations } }];"
+      }
+    }
+  ],
+  "connections": {
+    "Вызов из другого workflow": {
+      "main": [[{ "node": "Нормализовать входные данные", "type": "main", "index": 0 }]]
+    },
+    "Нормализовать входные данные": {
+      "main": [[{ "node": "Подготовить промпт для LLM", "type": "main", "index": 0 }]]
+    },
+    "Подготовить промпт для LLM": {
+      "main": [[{ "node": "Ollama: сформулировать нарушения", "type": "main", "index": 0 }]]
+    },
+    "Ollama: сформулировать нарушения": {
+      "main": [[{ "node": "Привести к единому формату", "type": "main", "index": 0 }]]
+    }
+  },
+  "id": "HR-LIB-RAG-02"
+}
