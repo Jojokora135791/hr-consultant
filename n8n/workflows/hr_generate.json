@@ -1,0 +1,402 @@
+{
+  "name": "HR Generate — генерация документов",
+  "active": false,
+  "settings": { "executionOrder": "v1" },
+  "nodes": [
+    {
+      "id": "sticky-gen",
+      "name": "📌 HR Generate — всё в одном",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [-220, -400],
+      "parameters": {
+        "content": "## HR Generate — генерация документов\n\n**Вызывается из:** hr_agent как tool `generate_documents`\n\n**Вход (через toolWorkflow → $json.query):**\n```json\n{\n  \"scenario\": \"progul_ochny\",\n  \"employee\": { \"name\", \"position\", \"department\" },\n  \"violation\": { \"date\", \"discoveryDate\", \"absenceStart\", \"absenceEnd\", \"description\" },\n  \"respectableReason\": false,\n  \"respectableReasonComment\": \"\",\n  \"evidenceDescription\": \"...\",\n  \"contactAttempts\": \"...\",\n  \"manager\": { \"name\", \"position\" }\n}\n```\n\n**Цепочка:**\n1. normalize → check_dates (PostgreSQL) → if_expired\n2. switch_scenario → read_knowledge (или заглушка)\n3. vision_stub → RAG → merge_violations\n4. switch_need_act → [build_act?] → merge_act\n5. build_sz → final_output\n\n**Переиспользуемые шаги:** vision_stub, RAG, build_sz —\nполучают стрелки от нескольких веток Switch.\n\n**Контент из файлов (не захардкожен):**\n- knowledge/progul_checklist.md\n- knowledge/progul_tk193.md\n- templates/act_progul.md\n- templates/sz_progul.md\n\n**Буферы сроков:** 5м15д / 20д — внутреннее решение Контура.\nУточнить у Касмыниной О. (не ТК РФ).",
+        "height": 500,
+        "width": 580,
+        "color": 4
+      }
+    },
+    {
+      "id": "sticky-scenario-switch",
+      "name": "📌 Добавить новый сценарий",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [1280, -200],
+      "parameters": {
+        "content": "## Добавить новый сценарий\n\n1. Создать `knowledge/{scenario}_checklist.md`\n2. Добавить ветку в «Выбор сценария» (Switch)\n3. Добавить нод «Прочитать данные {scenario}»\n4. Подключить к «Vision: анализ доказательств»\n5. Если нужен акт — добавить ветку в «Нужен акт?»\n\nRAG, Vision, build_sz — переиспользуются автоматически.",
+        "height": 220,
+        "width": 360,
+        "color": 7
+      }
+    },
+    {
+      "id": "gen-trigger",
+      "name": "Вызов из агента",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [0, 300],
+      "parameters": {}
+    },
+    {
+      "id": "gen-normalize",
+      "name": "Нормализовать данные",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [220, 300],
+      "parameters": {
+        "jsCode": "const raw = $input.first().json;\nlet data = raw;\nif (raw.query && typeof raw.query === 'object' && !Array.isArray(raw.query)) {\n  data = raw.query;\n} else if (typeof raw.input === 'string') {\n  try { data = JSON.parse(raw.input); } catch(e) {}\n} else if (typeof raw.query === 'string') {\n  try { data = JSON.parse(raw.query); } catch(e) {}\n}\nif (!data.employee) throw new Error('hr_generate: не переданы данные employee. Получено: ' + JSON.stringify(raw));\nif (!data.violation) throw new Error('hr_generate: не переданы данные violation.');\ndata.scenario = data.scenario || 'progul_ochny';\nreturn [{ json: {\n  context: data,\n  violationDate: data.violation.date,\n  discoveryDate: data.violation.discoveryDate\n} }];"
+      }
+    },
+    {
+      "id": "gen-check-dates",
+      "name": "PostgreSQL: проверить сроки",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [440, 300],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT CASE WHEN CURRENT_DATE >= '{{ $json.violationDate }}'::date + INTERVAL '5 months 15 days' THEN true WHEN CURRENT_DATE >= '{{ $json.discoveryDate }}'::date + INTERVAL '20 days' THEN true ELSE false END AS is_expired, CASE WHEN CURRENT_DATE >= '{{ $json.violationDate }}'::date + INTERVAL '5 months 15 days' THEN 'violation_date' WHEN CURRENT_DATE >= '{{ $json.discoveryDate }}'::date + INTERVAL '20 days' THEN 'discovery_date' ELSE null END AS expired_reason, ('{{ $json.violationDate }}'::date + INTERVAL '5 months 15 days')::text AS violation_deadline, ('{{ $json.discoveryDate }}'::date + INTERVAL '20 days')::text AS discovery_deadline",
+        "options": {}
+      },
+      "credentials": {
+        "postgres": {
+          "id": "REPLACE_ME",
+          "name": "hr_assistant PostgreSQL"
+        }
+      }
+    },
+    {
+      "id": "gen-format-dates",
+      "name": "Формат дат",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [660, 300],
+      "parameters": {
+        "jsCode": "const r = $input.first().json;\nconst prev = $('Нормализовать данные').first().json;\nreturn [{ json: {\n  context: prev.context,\n  dates: {\n    isExpired: r.is_expired === true || r.is_expired === 'true',\n    expiredReason: r.expired_reason || null,\n    violationDeadline: r.violation_deadline,\n    discoveryDeadline: r.discovery_deadline\n  }\n} }];"
+      }
+    },
+    {
+      "id": "gen-if-expired",
+      "name": "Срок не истёк?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [880, 300],
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict", "version": 2 },
+          "conditions": [
+            {
+              "id": "cond-expired",
+              "leftValue": "={{ $json.dates.isExpired }}",
+              "rightValue": true,
+              "operator": { "type": "boolean", "operation": "equal" }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "gen-expired-output",
+      "name": "Срок истёк — ответ",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1100, 160],
+      "parameters": {
+        "jsCode": "const d = $input.first().json;\nconst byViolation = d.dates?.expiredReason === 'violation_date';\nconst reason = byViolation\n  ? `Превышен срок 5 мес. 15 дней с даты нарушения (крайний срок: ${d.dates?.violationDeadline || '—'})`\n  : `Превышен срок 20 дней с даты обнаружения (крайний срок: ${d.dates?.discoveryDeadline || '—'})`;\nreturn [{ json: {\n  output: `⛔ Привлечение к дисциплинарной ответственности невозможно.\\n\\n${reason}\\n\\nОбратитесь к Касмыниной О. или Черепановой Т. для уточнения.`\n} }];"
+      }
+    },
+    {
+      "id": "gen-switch-scenario",
+      "name": "Выбор сценария",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [1100, 440],
+      "parameters": {
+        "mode": "rules",
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict", "version": 2 },
+                "conditions": [
+                  {
+                    "id": "cond-progul",
+                    "leftValue": "={{ $json.context.scenario }}",
+                    "rightValue": "progul_ochny",
+                    "operator": { "type": "string", "operation": "equals" }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "progul_ochny"
+            }
+          ]
+        },
+        "options": { "fallbackOutput": "extra" }
+      }
+    },
+    {
+      "id": "gen-read-progul",
+      "name": "Прочитать данные прогула",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1320, 360],
+      "parameters": {
+        "jsCode": "const fs = require('fs');\nconst base = process.env.HR_KNOWLEDGE_DIR\n  || '/Users/olegkluev/Documents/Projects/hr-consultant/knowledge';\nconst checklist = fs.readFileSync(`${base}/progul_checklist.md`, 'utf8');\nconst tk = fs.readFileSync(`${base}/progul_tk193.md`, 'utf8');\nconst d = $input.first().json;\nreturn [{ json: { ...d, checklist_content: checklist, tk_content: tk } }];"
+      }
+    },
+    {
+      "id": "gen-scenario-stub",
+      "name": "Сценарий: заглушка",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1320, 540],
+      "parameters": {
+        "jsCode": "// TODO: добавить knowledge-файлы и убрать эту заглушку\n// Инструкция в sticky note «Добавить новый сценарий» (см. выше)\nconst d = $input.first().json;\nconst scenario = d.context?.scenario || 'unknown';\nreturn [{ json: {\n  ...d,\n  checklist_content: `[ЗАГЛУШКА] Сценарий \"${scenario}\" не реализован. Добавьте knowledge/${scenario}_checklist.md`,\n  tk_content: '[ЗАГЛУШКА] Нормативная база для сценария не загружена'\n} }];"
+      }
+    },
+    {
+      "id": "gen-vision-stub",
+      "name": "Vision: анализ доказательств (заглушка)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1540, 440],
+      "parameters": {
+        "jsCode": "// VISION STUB v1 — TODO: заменить на HTTP Request к vision-модели Ollama (qwen2-vl / llava)\n// Интерфейс: принимает evidenceDescription, возвращает { vision_stub, analysis }\n// При замене: убрать этот нод, добавить HTTP Request к http://127.0.0.1:11434/api/generate\n// с моделью qwen2-vl и base64-изображением в поле images[]\nconst d = $input.first().json;\nconst desc = d.context?.evidenceDescription || 'Доказательства не предоставлены';\nreturn [{ json: {\n  ...d,\n  vision_analysis: {\n    vision_stub: true,\n    analysis: desc,\n    _note: 'STUB: заменить на реальную vision-модель Ollama'\n  }\n} }];"
+      }
+    },
+    {
+      "id": "gen-prompt-rag",
+      "name": "Промпт: нарушения (RAG)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1760, 440],
+      "parameters": {
+        "jsCode": "const d = $input.first().json;\nconst ctx = d.context;\nconst prompt = `Ты — юридический ассистент по трудовому праву. Твоя задача — кратко и точно сформулировать нарушение трудовых обязанностей со ссылками на нормативные акты.\\n\\n## Данные о нарушении\\nСотрудник: ${ctx.employee?.name || '[не указано]'}\\nДолжность: ${ctx.employee?.position || '[не указано]'}\\nПодразделение: ${ctx.employee?.department || '[не указано]'}\\nДата нарушения: ${ctx.violation?.date || '[не указано]'}\\nОписание: ${ctx.violation?.description || 'Прогул — отсутствие на рабочем месте без уважительной причины'}\\nУважительная причина: ${ctx.respectableReason ? 'Есть: ' + ctx.respectableReasonComment : 'Отсутствует'}\\n\\n## Чеклист (внутренняя инструкция)\\n${d.checklist_content}\\n\\n## Нормативная база\\n${d.tk_content}\\n\\n## Задача\\nСформулируй нарушение в 2-4 предложениях для включения в служебную записку. Укажи конкретные статьи, пункты. Формат: юридически грамотно, сухо, без лишних слов.\\nОтвечай ТОЛЬКО формулировкой нарушения, без вводных фраз.`;\nreturn [{ json: { ...d, prompt_rag: prompt } }];"
+      }
+    },
+    {
+      "id": "gen-ollama-rag",
+      "name": "Ollama: нарушения",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1980, 440],
+      "parameters": {
+        "method": "POST",
+        "url": "http://127.0.0.1:11434/api/generate",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            { "name": "model", "value": "qwen2.5:7b" },
+            { "name": "prompt", "value": "={{ $json.prompt_rag }}" },
+            { "name": "stream", "value": false }
+          ]
+        },
+        "options": { "timeout": 60000 }
+      }
+    },
+    {
+      "id": "gen-merge-violations",
+      "name": "Объединить нарушения",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2200, 440],
+      "parameters": {
+        "jsCode": "const r = $input.first().json;\nconst violations = r.response?.trim() || '[Не удалось сформулировать нарушение]';\nconst prev = $('Vision: анализ доказательств (заглушка)').first().json;\nreturn [{ json: {\n  context: prev.context,\n  dates: prev.dates,\n  checklist_content: prev.checklist_content,\n  tk_content: prev.tk_content,\n  vision_analysis: prev.vision_analysis,\n  violations\n} }];"
+      }
+    },
+    {
+      "id": "gen-switch-need-act",
+      "name": "Нужен акт?",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [2420, 440],
+      "parameters": {
+        "mode": "rules",
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict", "version": 2 },
+                "conditions": [
+                  {
+                    "id": "cond-need-act",
+                    "leftValue": "={{ $json.context.scenario }}",
+                    "rightValue": "progul_ochny",
+                    "operator": { "type": "string", "operation": "equals" }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "да (прогул)"
+            }
+          ]
+        },
+        "options": { "fallbackOutput": "extra" }
+      }
+    },
+    {
+      "id": "gen-prompt-act",
+      "name": "Промпт: акт об отсутствии",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2640, 360],
+      "parameters": {
+        "jsCode": "const fs = require('fs');\nconst base = process.env.HR_TEMPLATES_DIR\n  || '/Users/olegkluev/Documents/Projects/hr-consultant/templates';\nconst template = fs.readFileSync(`${base}/act_progul.md`, 'utf8');\nconst d = $input.first().json;\nconst ctx = d.context;\nconst today = new Date().toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' });\nconst prompt = `Ты — помощник HR-специалиста. Заполни шаблон акта об отсутствии на рабочем месте реальными данными.\\n\\n## Шаблон\\n${template}\\n\\n## Данные для заполнения\\nСотрудник (ФИО): ${ctx.employee?.name || '[УТОЧНИТЬ]'}\\nДолжность: ${ctx.employee?.position || '[УТОЧНИТЬ]'}\\nПодразделение: ${ctx.employee?.department || '[УТОЧНИТЬ]'}\\nДата отсутствия: ${ctx.violation?.date || '[УТОЧНИТЬ]'}\\nВремя отсутствия: с ${ctx.violation?.absenceStart || '09:00'} по ${ctx.violation?.absenceEnd || '18:00'}\\nПопытки связи: ${ctx.contactAttempts || 'Предприняты попытки связаться по телефону и электронной почте'}\\nУважительная причина: ${ctx.respectableReason ? ctx.respectableReasonComment : 'не установлена'}\\nДоказательства: ${d.vision_analysis?.analysis || 'не предоставлены'}\\nРуководитель (ФИО): ${ctx.manager?.name || '[УТОЧНИТЬ]'}\\nДолжность руководителя: ${ctx.manager?.position || '[УТОЧНИТЬ]'}\\nФормулировка нарушения: ${d.violations}\\nСегодняшняя дата: ${today}\\n\\n## Инструкция\\nЗаполни ВСЕ {{placeholders}} из шаблона реальными данными. Там где данных нет — поставь [УТОЧНИТЬ].\\nВерни ТОЛЬКО готовый текст акта, без пояснений и markdown-обёрток.`;\nreturn [{ json: { ...d, prompt_act: prompt } }];"
+      }
+    },
+    {
+      "id": "gen-ollama-act",
+      "name": "Ollama: генерация акта",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2860, 360],
+      "parameters": {
+        "method": "POST",
+        "url": "http://127.0.0.1:11434/api/generate",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            { "name": "model", "value": "qwen2.5:7b" },
+            { "name": "prompt", "value": "={{ $json.prompt_act }}" },
+            { "name": "stream", "value": false }
+          ]
+        },
+        "options": { "timeout": 120000 }
+      }
+    },
+    {
+      "id": "gen-skip-act",
+      "name": "Акт не нужен",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2640, 540],
+      "parameters": {
+        "jsCode": "// Для данного сценария акт об отсутствии не требуется\n// act_text остаётся пустым — финальный вывод это учтёт\nconst d = $input.first().json;\nreturn [{ json: { ...d, act_text: '' } }];"
+      }
+    },
+    {
+      "id": "gen-merge-act",
+      "name": "Объединить акт",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [3080, 440],
+      "parameters": {
+        "jsCode": "const r = $input.first().json;\n// Если пришли из Ollama — берём response\n// Если пришли из «Акт не нужен» — берём act_text (пустой)\nconst act_text = r.response?.trim() || r.act_text || '';\nconst prev = $('Объединить нарушения').first().json;\nreturn [{ json: {\n  context: prev.context,\n  dates: prev.dates,\n  vision_analysis: prev.vision_analysis,\n  violations: prev.violations,\n  act_text\n} }];"
+      }
+    },
+    {
+      "id": "gen-prompt-sz",
+      "name": "Промпт: служебная записка",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [3300, 440],
+      "parameters": {
+        "jsCode": "const fs = require('fs');\nconst base = process.env.HR_TEMPLATES_DIR\n  || '/Users/olegkluev/Documents/Projects/hr-consultant/templates';\nconst scenario = $input.first().json.context?.scenario || 'progul';\nlet templatePath = `${base}/sz_${scenario}.md`;\nif (!fs.existsSync(templatePath)) templatePath = `${base}/sz_progul.md`;\nconst template = fs.readFileSync(templatePath, 'utf8');\nconst d = $input.first().json;\nconst ctx = d.context;\nconst today = new Date().toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' });\nconst prompt = `Ты — помощник HR-специалиста. Заполни шаблон служебной записки реальными данными.\\n\\n## Шаблон\\n${template}\\n\\n## Данные для заполнения\\nСотрудник (ФИО): ${ctx.employee?.name || '[УТОЧНИТЬ]'}\\nДолжность: ${ctx.employee?.position || '[УТОЧНИТЬ]'}\\nПодразделение: ${ctx.employee?.department || '[УТОЧНИТЬ]'}\\nДата нарушения: ${ctx.violation?.date || '[УТОЧНИТЬ]'}\\nВремя отсутствия: с ${ctx.violation?.absenceStart || '09:00'} по ${ctx.violation?.absenceEnd || '18:00'}\\nРуководитель (ФИО): ${ctx.manager?.name || '[УТОЧНИТЬ]'}\\nДолжность руководителя: ${ctx.manager?.position || '[УТОЧНИТЬ]'}\\nПодразделение руководителя: ${ctx.manager?.department || ctx.employee?.department || '[УТОЧНИТЬ]'}\\nУважительная причина: ${ctx.respectableReason ? ctx.respectableReasonComment : 'не установлена'}\\nПредпринятые меры: ${ctx.contactAttempts || 'Предприняты попытки связаться по телефону и электронной почте'}\\nДоказательства: ${d.vision_analysis?.analysis || 'не предоставлены'}\\nФормулировка нарушения: ${d.violations}\\nАкт об отсутствии: ${d.act_text ? 'составлен' : 'не составлен'}\\nСегодняшняя дата: ${today}\\n\\n## Инструкция\\nЗаполни ВСЕ {{placeholders}} из шаблона реальными данными. Там где данных нет — поставь [УТОЧНИТЬ].\\nВерни ТОЛЬКО готовый текст служебной записки, без пояснений и markdown-обёрток.`;\nreturn [{ json: { ...d, prompt_sz: prompt } }];"
+      }
+    },
+    {
+      "id": "gen-ollama-sz",
+      "name": "Ollama: генерация СЗ",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [3520, 440],
+      "parameters": {
+        "method": "POST",
+        "url": "http://127.0.0.1:11434/api/generate",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            { "name": "model", "value": "qwen2.5:7b" },
+            { "name": "prompt", "value": "={{ $json.prompt_sz }}" },
+            { "name": "stream", "value": false }
+          ]
+        },
+        "options": { "timeout": 120000 }
+      }
+    },
+    {
+      "id": "gen-final-output",
+      "name": "Финальный ответ",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [3740, 440],
+      "parameters": {
+        "jsCode": "const r = $input.first().json;\nconst sz_text = r.response?.trim() || '[Не удалось сгенерировать служебную записку]';\nconst prev = $('Объединить акт').first().json;\nconst actBlock = prev.act_text\n  ? `📋 АКТ ОБ ОТСУТСТВИИ НА РАБОЧЕМ МЕСТЕ\\n\\n${prev.act_text}\\n\\n---\\n\\n`\n  : '';\nconst output = `✅ Документы сформированы!\\n\\n---\\n\\n${actBlock}📝 СЛУЖЕБНАЯ ЗАПИСКА\\n\\n${sz_text}\\n\\n---\\n\\n⚠️ Проверьте документы перед отправкой. Поля [УТОЧНИТЬ] требуют вашего заполнения.\\nПосле проверки — передайте пакет Черепановой Т. или Касмыниной О.`;\nreturn [{ json: { output, act_text: prev.act_text, sz_text } }];"
+      }
+    }
+  ],
+  "connections": {
+    "Вызов из агента": {
+      "main": [[{ "node": "Нормализовать данные", "type": "main", "index": 0 }]]
+    },
+    "Нормализовать данные": {
+      "main": [[{ "node": "PostgreSQL: проверить сроки", "type": "main", "index": 0 }]]
+    },
+    "PostgreSQL: проверить сроки": {
+      "main": [[{ "node": "Формат дат", "type": "main", "index": 0 }]]
+    },
+    "Формат дат": {
+      "main": [[{ "node": "Срок не истёк?", "type": "main", "index": 0 }]]
+    },
+    "Срок не истёк?": {
+      "main": [
+        [{ "node": "Срок истёк — ответ", "type": "main", "index": 0 }],
+        [{ "node": "Выбор сценария", "type": "main", "index": 0 }]
+      ]
+    },
+    "Выбор сценария": {
+      "main": [
+        [{ "node": "Прочитать данные прогула", "type": "main", "index": 0 }],
+        [{ "node": "Сценарий: заглушка", "type": "main", "index": 0 }]
+      ]
+    },
+    "Прочитать данные прогула": {
+      "main": [[{ "node": "Vision: анализ доказательств (заглушка)", "type": "main", "index": 0 }]]
+    },
+    "Сценарий: заглушка": {
+      "main": [[{ "node": "Vision: анализ доказательств (заглушка)", "type": "main", "index": 0 }]]
+    },
+    "Vision: анализ доказательств (заглушка)": {
+      "main": [[{ "node": "Промпт: нарушения (RAG)", "type": "main", "index": 0 }]]
+    },
+    "Промпт: нарушения (RAG)": {
+      "main": [[{ "node": "Ollama: нарушения", "type": "main", "index": 0 }]]
+    },
+    "Ollama: нарушения": {
+      "main": [[{ "node": "Объединить нарушения", "type": "main", "index": 0 }]]
+    },
+    "Объединить нарушения": {
+      "main": [[{ "node": "Нужен акт?", "type": "main", "index": 0 }]]
+    },
+    "Нужен акт?": {
+      "main": [
+        [{ "node": "Промпт: акт об отсутствии", "type": "main", "index": 0 }],
+        [{ "node": "Акт не нужен", "type": "main", "index": 0 }]
+      ]
+    },
+    "Промпт: акт об отсутствии": {
+      "main": [[{ "node": "Ollama: генерация акта", "type": "main", "index": 0 }]]
+    },
+    "Ollama: генерация акта": {
+      "main": [[{ "node": "Объединить акт", "type": "main", "index": 0 }]]
+    },
+    "Акт не нужен": {
+      "main": [[{ "node": "Объединить акт", "type": "main", "index": 0 }]]
+    },
+    "Объединить акт": {
+      "main": [[{ "node": "Промпт: служебная записка", "type": "main", "index": 0 }]]
+    },
+    "Промпт: служебная записка": {
+      "main": [[{ "node": "Ollama: генерация СЗ", "type": "main", "index": 0 }]]
+    },
+    "Ollama: генерация СЗ": {
+      "main": [[{ "node": "Финальный ответ", "type": "main", "index": 0 }]]
+    }
+  },
+  "id": "HR-GENERATE-V4-01"
+}
