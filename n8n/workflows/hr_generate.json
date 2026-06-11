@@ -1,299 +1,152 @@
 {
-  "name": "HR Generate — генерация документов",
-  "active": false,
-  "settings": { "executionOrder": "v1" },
+  "name": "Генерация документов",
   "nodes": [
     {
-      "id": "sticky-gen",
+      "parameters": {
+        "content": "## HR Generate — генерация документов\n\n**Вызывается из:** hr_agent как tool `generate_documents`\n\n**Вход (через toolWorkflow → $json.query):**\n```json\n{\n  \"scenario\": \"progul_ochny\",\n  \"employee\": { \"name\", \"position\", \"department\" },\n  \"violation\": { \"date\", \"discoveryDate\", \"absenceStart\", \"absenceEnd\", \"description\" },\n  \"respectableReason\": false,\n  \"respectableReasonComment\": \"\",\n  \"evidenceDescription\": \"...\",\n  \"contactAttempts\": \"...\",\n  \"manager\": { \"name\", \"position\" }\n}\n```\n\n**Цепочка:**\n1. normalize → check_dates (PostgreSQL) → if_expired\n2. switch_scenario → read_knowledge (или заглушка)\n3. vision_stub → RAG → merge_violations\n4. switch_need_act → [build_act?] → merge_act\n5. build_sz → final_output\n\n**Переиспользуемые шаги:** vision_stub, RAG, build_sz —\nполучают стрелки от нескольких веток Switch.\n\n**Контент из файлов (не захардкожен):**\n- knowledge/progul_checklist.md\n- knowledge/progul_tk193.md\n- templates/act_progul.md\n- templates/sz_progul.md\n",
+        "height": 740,
+        "width": 980,
+        "color": 4
+      },
+      "id": "5e77fc74-f477-4026-9e47-35eac0bb6a1d",
       "name": "📌 HR Generate — всё в одном",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
-      "position": [-220, -400],
-      "parameters": {
-        "content": "## HR Generate — генерация документов\n\n**Вызывается из:** hr_agent как tool `generate_documents`\n\n**Вход (через toolWorkflow → $json.query):**\n```json\n{\n  \"scenario\": \"progul_ochny\",\n  \"employee\": { \"name\", \"position\", \"department\" },\n  \"violation\": { \"date\", \"discoveryDate\", \"absenceStart\", \"absenceEnd\", \"description\" },\n  \"respectableReason\": false,\n  \"respectableReasonComment\": \"\",\n  \"evidenceDescription\": \"...\",\n  \"contactAttempts\": \"...\",\n  \"manager\": { \"name\", \"position\" }\n}\n```\n\n**Цепочка:**\n1. normalize → check_dates (PostgreSQL) → if_expired\n2. switch_scenario → read_knowledge (или заглушка)\n3. vision_stub → RAG → merge_violations\n4. switch_need_act → [build_act?] → merge_act\n5. build_sz → final_output\n\n**Переиспользуемые шаги:** vision_stub, RAG, build_sz —\nполучают стрелки от нескольких веток Switch.\n\n**Контент из файлов (не захардкожен):**\n- knowledge/progul_checklist.md\n- knowledge/progul_tk193.md\n- templates/act_progul.md\n- templates/sz_progul.md\n\n**Буферы сроков:** 5м15д / 20д — внутреннее решение Контура.\nУточнить у Касмыниной О. (не ТК РФ).",
-        "height": 500,
-        "width": 580,
-        "color": 4
-      }
+      "position": [
+        -960,
+        368
+      ]
     },
     {
-      "id": "sticky-scenario-switch",
-      "name": "📌 Добавить новый сценарий",
-      "type": "n8n-nodes-base.stickyNote",
-      "typeVersion": 1,
-      "position": [1280, -200],
       "parameters": {
         "content": "## Добавить новый сценарий\n\n1. Создать `knowledge/{scenario}_checklist.md`\n2. Добавить ветку в «Выбор сценария» (Switch)\n3. Добавить нод «Прочитать данные {scenario}»\n4. Подключить к «Vision: анализ доказательств»\n5. Если нужен акт — добавить ветку в «Нужен акт?»\n\nRAG, Vision, build_sz — переиспользуются автоматически.",
         "height": 220,
         "width": 360,
         "color": 7
-      }
-    },
-    {
-      "id": "note-trigger",
-      "name": " ",
+      },
+      "id": "6055bbfd-e20d-4a81-8a53-a4634db6541d",
+      "name": "📌 Добавить новый сценарий",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
-      "position": [0, 420],
-      "parameters": { "content": "**Вызов из агента**\nТочка входа. Принимает данные от hr_agent через toolWorkflow. Всё приходит в $json.", "height": 90, "width": 200, "color": 6 }
+      "position": [
+        -352,
+        720
+      ]
     },
     {
-      "id": "note-normalize",
-      "name": "  ",
-      "type": "n8n-nodes-base.stickyNote",
-      "typeVersion": 1,
-      "position": [220, 420],
-      "parameters": { "content": "**Нормализовать данные**\nРаспаковывает $json.query (от toolWorkflow). Проверяет наличие employee и violation.", "height": 90, "width": 200, "color": 6 }
-    },
-    {
-      "id": "note-check-dates",
-      "name": "   ",
-      "type": "n8n-nodes-base.stickyNote",
-      "typeVersion": 1,
-      "position": [440, 420],
-      "parameters": { "content": "**PostgreSQL: проверить сроки**\nSQL по ТК ст.193. Дедлайны: 5м15д от нарушения, 20д от обнаружения (буфер Контура).", "height": 90, "width": 200, "color": 6 }
-    },
-    {
-      "id": "note-format-dates",
-      "name": "    ",
-      "type": "n8n-nodes-base.stickyNote",
-      "typeVersion": 1,
-      "position": [660, 420],
-      "parameters": { "content": "**Формат дат**\nПриводит результат SQL к { isExpired, expiredReason, violationDeadline, discoveryDeadline }.", "height": 90, "width": 200, "color": 6 }
-    },
-    {
-      "id": "note-if-expired",
-      "name": "     ",
-      "type": "n8n-nodes-base.stickyNote",
-      "typeVersion": 1,
-      "position": [880, 420],
-      "parameters": { "content": "**Срок не истёк?**\nIF: isExpired=true → ветка «нельзя привлечь». false → продолжаем генерацию.", "height": 90, "width": 200, "color": 6 }
-    },
-    {
-      "id": "note-expired-output",
-      "name": "      ",
-      "type": "n8n-nodes-base.stickyNote",
-      "typeVersion": 1,
-      "position": [1100, 40],
-      "parameters": { "content": "**Срок истёк — ответ**\nФормирует сообщение с указанием какой срок истёк. Возвращает { output }.", "height": 90, "width": 200, "color": 3 }
-    },
-    {
-      "id": "note-switch-scenario",
-      "name": "       ",
-      "type": "n8n-nodes-base.stickyNote",
-      "typeVersion": 1,
-      "position": [1100, 560],
-      "parameters": { "content": "**Выбор сценария**\nSwitch по context.scenario. progul_ochny → своя ветка. Остальные → заглушка.", "height": 90, "width": 200, "color": 6 }
-    },
-    {
-      "id": "note-read-progul",
-      "name": "        ",
-      "type": "n8n-nodes-base.stickyNote",
-      "typeVersion": 1,
-      "position": [1320, 480],
-      "parameters": { "content": "**Прочитать данные прогула**\nЧеклист + ТК ст.193 вшиты в код. Добавляет needAct=true и checklist_content, tk_content.", "height": 100, "width": 200, "color": 6 }
-    },
-    {
-      "id": "note-scenario-stub",
-      "name": "         ",
-      "type": "n8n-nodes-base.stickyNote",
-      "typeVersion": 1,
-      "position": [1320, 660],
-      "parameters": { "content": "**Сценарий: заглушка**\nTODO. Возвращает пустые данные + сообщение что сценарий не реализован.", "height": 90, "width": 200, "color": 3 }
-    },
-    {
-      "id": "note-vision-stub",
-      "name": "          ",
-      "type": "n8n-nodes-base.stickyNote",
-      "typeVersion": 1,
-      "position": [1540, 560],
-      "parameters": { "content": "**Vision: заглушка**\nSTUB. Передаёт evidenceDescription как analysis. Заменить на HTTP Request к qwen2-vl/llava.", "height": 90, "width": 200, "color": 3 }
-    },
-    {
-      "id": "note-prompt-rag",
-      "name": "           ",
-      "type": "n8n-nodes-base.stickyNote",
-      "typeVersion": 1,
-      "position": [1760, 560],
-      "parameters": { "content": "**Промпт: RAG**\nСобирает промпт: данные о сотруднике + чеклист + ТК. Результат → prompt_rag.", "height": 90, "width": 200, "color": 6 }
-    },
-    {
-      "id": "note-ollama-rag",
-      "name": "            ",
-      "type": "n8n-nodes-base.stickyNote",
-      "typeVersion": 1,
-      "position": [1980, 560],
-      "parameters": { "content": "**Ollama: нарушения**\nHTTP POST к qwen2.5:7b. Формулирует нарушение со ссылками на ТК. Таймаут 60с.", "height": 90, "width": 200, "color": 6 }
-    },
-    {
-      "id": "note-merge-violations",
-      "name": "             ",
-      "type": "n8n-nodes-base.stickyNote",
-      "typeVersion": 1,
-      "position": [2200, 560],
-      "parameters": { "content": "**Объединить нарушения**\nБерёт violations из Ollama. Восстанавливает полный контекст из Vision-нода по имени.", "height": 90, "width": 200, "color": 6 }
-    },
-    {
-      "id": "note-switch-need-act",
-      "name": "              ",
-      "type": "n8n-nodes-base.stickyNote",
-      "typeVersion": 1,
-      "position": [2420, 560],
-      "parameters": { "content": "**Нужен акт?**\nSwitch: progul_ochny → генерируем акт. Остальные сценарии → пропускаем.", "height": 90, "width": 200, "color": 6 }
-    },
-    {
-      "id": "note-prompt-act",
-      "name": "               ",
-      "type": "n8n-nodes-base.stickyNote",
-      "typeVersion": 1,
-      "position": [2640, 480],
-      "parameters": { "content": "**Промпт: акт**\nШаблон акта вшит в код. Собирает промпт с данными о сотруднике и нарушении.", "height": 90, "width": 200, "color": 6 }
-    },
-    {
-      "id": "note-ollama-act",
-      "name": "                ",
-      "type": "n8n-nodes-base.stickyNote",
-      "typeVersion": 1,
-      "position": [2860, 480],
-      "parameters": { "content": "**Ollama: акт**\nHTTP POST к qwen2.5:7b. Заполняет шаблон акта реальными данными. Таймаут 120с.", "height": 90, "width": 200, "color": 6 }
-    },
-    {
-      "id": "note-skip-act",
-      "name": "                 ",
-      "type": "n8n-nodes-base.stickyNote",
-      "typeVersion": 1,
-      "position": [2640, 660],
-      "parameters": { "content": "**Акт не нужен**\nПробрасывает данные дальше с act_text=''. Для сценариев без акта об отсутствии.", "height": 90, "width": 200, "color": 6 }
-    },
-    {
-      "id": "note-merge-act",
-      "name": "                  ",
-      "type": "n8n-nodes-base.stickyNote",
-      "typeVersion": 1,
-      "position": [3080, 560],
-      "parameters": { "content": "**Объединить акт**\nБерёт act_text из Ollama или пустую строку. Восстанавливает контекст из Объединить нарушения.", "height": 90, "width": 200, "color": 6 }
-    },
-    {
-      "id": "note-prompt-sz",
-      "name": "                   ",
-      "type": "n8n-nodes-base.stickyNote",
-      "typeVersion": 1,
-      "position": [3300, 560],
-      "parameters": { "content": "**Промпт: СЗ**\nШаблон СЗ вшит в код. Включает violations и act_text в промпт для служебной записки.", "height": 90, "width": 200, "color": 6 }
-    },
-    {
-      "id": "note-ollama-sz",
-      "name": "                    ",
-      "type": "n8n-nodes-base.stickyNote",
-      "typeVersion": 1,
-      "position": [3520, 560],
-      "parameters": { "content": "**Ollama: СЗ**\nHTTP POST к qwen2.5:7b. Заполняет шаблон служебной записки. Таймаут 120с.", "height": 90, "width": 200, "color": 6 }
-    },
-    {
-      "id": "note-final-output",
-      "name": "                     ",
-      "type": "n8n-nodes-base.stickyNote",
-      "typeVersion": 1,
-      "position": [3740, 560],
-      "parameters": { "content": "**Финальный ответ**\nСобирает итоговое сообщение с актом + СЗ. Возвращает { output, act_text, sz_text } агенту.", "height": 90, "width": 200, "color": 6 }
-    },
-    {
-      "id": "gen-trigger",
+      "parameters": {
+        "inputSource": "passthrough"
+      },
+      "id": "336bbfa6-8d0e-4d47-90c6-66f481880d0d",
       "name": "Вызов из агента",
       "type": "n8n-nodes-base.executeWorkflowTrigger",
       "typeVersion": 1.1,
-      "position": [0, 300],
-      "parameters": {}
+      "position": [
+        224,
+        704
+      ]
     },
     {
-      "id": "gen-normalize",
+      "parameters": {
+        "jsCode": "const raw = $input.first().json;\nlet data = raw;\nif (raw.query && typeof raw.query === 'object' && !Array.isArray(raw.query)) {\n  data = raw.query;\n} else if (typeof raw.input === 'string') {\n  try { data = JSON.parse(raw.input); } catch(e) {}\n} else if (typeof raw.query === 'string') {\n  try { data = JSON.parse(raw.query); } catch(e) {}\n}\nif (!data.employee) throw new Error('hr_generate: не переданы данные employee. Получено: ' + JSON.stringify(raw));\nif (!data.violation) throw new Error('hr_generate: не переданы данные violation.');\ndata.scenario = data.scenario || 'progul_ochny';\nreturn [{ json: {\n  context: data,\n  violationDate: data.violation.date,\n  discoveryDate: data.violation.discoveryDate\n} }];"
+      },
+      "id": "92957be7-f65a-4976-b638-cfa3a4cdf14c",
       "name": "Нормализовать данные",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [220, 300],
-      "parameters": {
-        "jsCode": "const raw = $input.first().json;\nlet data = raw;\nif (raw.query && typeof raw.query === 'object' && !Array.isArray(raw.query)) {\n  data = raw.query;\n} else if (typeof raw.input === 'string') {\n  try { data = JSON.parse(raw.input); } catch(e) {}\n} else if (typeof raw.query === 'string') {\n  try { data = JSON.parse(raw.query); } catch(e) {}\n}\nif (!data.employee) throw new Error('hr_generate: не переданы данные employee. Получено: ' + JSON.stringify(raw));\nif (!data.violation) throw new Error('hr_generate: не переданы данные violation.');\ndata.scenario = data.scenario || 'progul_ochny';\nreturn [{ json: {\n  context: data,\n  violationDate: data.violation.date,\n  discoveryDate: data.violation.discoveryDate\n} }];"
-      }
+      "position": [
+        448,
+        704
+      ]
     },
     {
-      "id": "gen-check-dates",
-      "name": "PostgreSQL: проверить сроки",
-      "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2.5,
-      "position": [440, 300],
       "parameters": {
         "operation": "executeQuery",
         "query": "SELECT CASE WHEN CURRENT_DATE >= '{{ $json.violationDate }}'::date + INTERVAL '5 months 15 days' THEN true WHEN CURRENT_DATE >= '{{ $json.discoveryDate }}'::date + INTERVAL '20 days' THEN true ELSE false END AS is_expired, CASE WHEN CURRENT_DATE >= '{{ $json.violationDate }}'::date + INTERVAL '5 months 15 days' THEN 'violation_date' WHEN CURRENT_DATE >= '{{ $json.discoveryDate }}'::date + INTERVAL '20 days' THEN 'discovery_date' ELSE null END AS expired_reason, ('{{ $json.violationDate }}'::date + INTERVAL '5 months 15 days')::text AS violation_deadline, ('{{ $json.discoveryDate }}'::date + INTERVAL '20 days')::text AS discovery_deadline",
         "options": {}
       },
+      "id": "1a0f7454-3657-42fd-985b-0d543e773998",
+      "name": "PostgreSQL: проверить сроки",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        672,
+        704
+      ],
       "credentials": {
         "postgres": {
-          "id": "REPLACE_ME",
-          "name": "hr_assistant PostgreSQL"
+          "id": "3W634hxRLEp3sfjP",
+          "name": "Postgres account 4"
         }
       }
     },
     {
-      "id": "gen-format-dates",
-      "name": "Формат дат",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [660, 300],
-      "parameters": {
-        "jsCode": "const r = $input.first().json;\nconst prev = $('Нормализовать данные').first().json;\nreturn [{ json: {\n  context: prev.context,\n  dates: {\n    isExpired: r.is_expired === true || r.is_expired === 'true',\n    expiredReason: r.expired_reason || null,\n    violationDeadline: r.violation_deadline,\n    discoveryDeadline: r.discovery_deadline\n  }\n} }];"
-      }
-    },
-    {
-      "id": "gen-if-expired",
-      "name": "Срок не истёк?",
-      "type": "n8n-nodes-base.if",
-      "typeVersion": 2,
-      "position": [880, 300],
       "parameters": {
         "conditions": {
-          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict", "version": 2 },
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
           "conditions": [
             {
               "id": "cond-expired",
               "leftValue": "={{ $json.dates.isExpired }}",
               "rightValue": true,
-              "operator": { "type": "boolean", "operation": "equal" }
+              "operator": {
+                "type": "boolean",
+                "operation": "equal"
+              }
             }
           ],
           "combinator": "and"
         },
         "options": {}
-      }
+      },
+      "id": "ac0819b5-464d-4615-9f58-abc021246520",
+      "name": "Срок не истёк?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1104,
+        704
+      ]
     },
     {
-      "id": "gen-expired-output",
+      "parameters": {
+        "jsCode": "const d = $input.first().json;\nconst byViolation = d.dates?.expiredReason === 'violation_date';\nconst reason = byViolation\n  ? `Превышен срок 5 мес. 15 дней с даты нарушения (крайний срок: ${d.dates?.violationDeadline || '—'})`\n  : `Превышен срок 20 дней с даты обнаружения (крайний срок: ${d.dates?.discoveryDeadline || '—'})`;\nreturn [{ json: {\n  output: `⛔ Привлечение к дисциплинарной ответственности невозможно.\\n\\n${reason}\\n\\nОбратитесь к Касмыниной О. или Черепановой Т. для уточнения.`\n} }];"
+      },
+      "id": "2c898234-222d-434b-899d-d8b8c477b664",
       "name": "Срок истёк — ответ",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1100, 160],
-      "parameters": {
-        "jsCode": "const d = $input.first().json;\nconst byViolation = d.dates?.expiredReason === 'violation_date';\nconst reason = byViolation\n  ? `Превышен срок 5 мес. 15 дней с даты нарушения (крайний срок: ${d.dates?.violationDeadline || '—'})`\n  : `Превышен срок 20 дней с даты обнаружения (крайний срок: ${d.dates?.discoveryDeadline || '—'})`;\nreturn [{ json: {\n  output: `⛔ Привлечение к дисциплинарной ответственности невозможно.\\n\\n${reason}\\n\\nОбратитесь к Касмыниной О. или Черепановой Т. для уточнения.`\n} }];"
-      }
+      "position": [
+        1344,
+        544
+      ]
     },
     {
-      "id": "gen-switch-scenario",
-      "name": "Выбор сценария",
-      "type": "n8n-nodes-base.switch",
-      "typeVersion": 3,
-      "position": [1100, 440],
       "parameters": {
-        "mode": "rules",
         "rules": {
           "values": [
             {
               "conditions": {
-                "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict", "version": 2 },
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 1
+                },
                 "conditions": [
                   {
                     "id": "cond-progul",
                     "leftValue": "={{ $json.context.scenario }}",
                     "rightValue": "progul_ochny",
-                    "operator": { "type": "string", "operation": "equals" }
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
                   }
                 ],
                 "combinator": "and"
@@ -303,98 +156,126 @@
             }
           ]
         },
-        "options": { "fallbackOutput": "extra" }
-      }
+        "options": {
+          "fallbackOutput": "extra"
+        }
+      },
+      "id": "65b56c5d-f057-4596-82f9-d7b1d709d90b",
+      "name": "Выбор сценария",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [
+        1328,
+        848
+      ]
     },
     {
-      "id": "gen-read-progul",
-      "name": "Прочитать данные прогула",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [1320, 360],
       "parameters": {
-        "jsCode": "// ============================================================\n// ДАННЫЕ ВШИТЫ НАПРЯМУЮ — fs недоступен в n8n Code нодах\n// Чтобы обновить: отредактируй строки checklist и tk ниже.\n// Источники:\n//   checklist → knowledge/progul_checklist.md\n//   tk        → knowledge/progul_tk193.md\n// ============================================================\n\nconst checklist = `# Чеклист: Прогул — отсутствие на рабочем месте без уважительной причины\n\n> Источник: внутренняя инструкция Контур. Обновлять при изменении регламентов.\n\n## Квалификация\n\nОтсутствие работника на рабочем месте без уважительной причины или без согласования с непосредственным руководителем — дисциплинарное нарушение.\n\n**Важно:** во время отсутствия не засчитывается обеденное время. При длительном прогуле исключаются: дни на больничном, в согласованном отпуске, выходные, праздники, дни командировки.\n\n## Порядок действий\n\n### Шаг 1. Свяжись с работником для установления причины\n- Позвони по известному номеру телефона (в т.ч. из корпоративного справочника Стафф)\n- Если не выходит на связь — позвони родственникам по номерам из анкеты при трудоустройстве\n- Сделай запрос на корпоративную электронную почту работника\n- Используй соцсети, чтобы понять причину невыхода\n\n### Шаг 2. Зафиксируй неявку\n- Составь **акт об отсутствии на рабочем месте** в конце рабочего дня\n- В акте укажи ФИО трёх работников-свидетелей, подтверждающих отсутствие\n- Если работник не вышел на следующий день — повтори процедуру (каждый день фиксируется отдельно)\n\n### Шаг 3. Передай информацию в отдел кадрового учёта\n- Сообщи Касмыниной Ольге или Черепановой Татьяне\n- В табеле учёта рабочего времени будет проставлено: **НН**\n\n### Шаг 4. Инициируй служебную проверку\nПодготовь **служебную записку**. Обязательные элементы:\n- ФИО и должность/подразделение работника\n- Дата и время отсутствия\n- Предпринятые меры (звонок работнику с выяснением причины)\n- Обстоятельства отсутствия (установлена ли причина)\n- Отсутствие информации по проактивным выплатам из Экстерн\n- Предложение о вынесении дисциплинарного взыскания\n\n### Шаг 5. Ожидай результаты служебной проверки\n- Ответственное лицо подготовит Требование о предоставлении объяснения\n- По результатам — решение о применении дисциплинарного взыскания\n\n## Нормативная основа\n- ТК РФ ст. 81 ч. 1 п. 6 пп. «а» — прогул как основание для увольнения\n- ТК РФ ст. 193 — порядок применения дисциплинарного взыскания\n- ПВТР Контура п. 13.2.1 — режим работы и рабочее место`;\n\nconst tk = `# ТК РФ — Статья 193. Порядок применения дисциплинарных взысканий\n\n> Источник: Трудовой кодекс РФ. Обновлять при изменении законодательства.\n\n## Текст статьи\n\nДо применения дисциплинарного взыскания работодатель должен затребовать от работника письменное объяснение. Если по истечении **двух рабочих дней** указанное объяснение работником не предоставлено, то составляется соответствующий акт.\n\nНепредоставление работником объяснения не является препятствием для применения дисциплинарного взыскания.\n\nДисциплинарное взыскание применяется **не позднее одного месяца со дня обнаружения** проступка, не считая времени болезни работника, пребывания его в отпуске, а также времени, необходимого на учёт мнения представительного органа работников.\n\nДисциплинарное взыскание не может быть применено **позднее шести месяцев со дня совершения** проступка.\n\n## Буферные сроки (внутренние, Контур)\n\n> ⚠️ Внутреннее решение — не ТК РФ. Уточнять у Касмыниной О. при изменениях.\n\n- **5 месяцев 15 дней** от даты совершения проступка (вместо 6 месяцев по ТК)\n- **20 календарных дней** от даты обнаружения (вместо 30 дней по ТК)\n\n## Применительно к прогулу\n\n- **Дата совершения** = дата отсутствия на рабочем месте\n- **Дата обнаружения** = как правило, тот же день\n- При длительном прогуле — каждый день фиксируется отдельно\n\n## Нормативная основа для документов\n\n- **ТК РФ ст. 81 ч. 1 п. 6 пп. «а»** — определение прогула (отсутствие > 4 часов без уважительной причины)\n- **ТК РФ ст. 193** — порядок привлечения к ответственности\n- **ПВТР Контура** — конкретный пункт, устанавливающий режим работы сотрудника\n- **Трудовой договор** — раздел о рабочем месте и режиме работы`;\n\nconst d = $input.first().json;\nreturn [{ json: { ...d, checklist_content: checklist, tk_content: tk } }];"
-      }
-    },
-    {
-      "id": "gen-scenario-stub",
+        "jsCode": "// TODO: добавить knowledge-файлы и убрать эту заглушку\n// Инструкция в sticky note «Добавить новый сценарий» (см. выше)\nconst d = $input.first().json;\nconst scenario = d.context?.scenario || 'unknown';\nreturn [{ json: {\n  ...d,\n  checklist_content: `[ЗАГЛУШКА] Сценарий \"${scenario}\" не реализован. Добавьте knowledge/${scenario}_checklist.md`,\n  tk_content: '[ЗАГЛУШКА] Нормативная база для сценария не загружена'\n} }];"
+      },
+      "id": "8c636b27-942b-41b5-ace4-9753183c17e0",
       "name": "Сценарий: заглушка",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1320, 540],
-      "parameters": {
-        "jsCode": "// TODO: добавить knowledge-файлы и убрать эту заглушку\n// Инструкция в sticky note «Добавить новый сценарий» (см. выше)\nconst d = $input.first().json;\nconst scenario = d.context?.scenario || 'unknown';\nreturn [{ json: {\n  ...d,\n  checklist_content: `[ЗАГЛУШКА] Сценарий \"${scenario}\" не реализован. Добавьте knowledge/${scenario}_checklist.md`,\n  tk_content: '[ЗАГЛУШКА] Нормативная база для сценария не загружена'\n} }];"
-      }
+      "position": [
+        1568,
+        992
+      ]
     },
     {
-      "id": "gen-vision-stub",
+      "parameters": {
+        "jsCode": "// VISION STUB v1 — TODO: заменить на HTTP Request к vision-модели Ollama (qwen2-vl / llava)\n// Интерфейс: принимает evidenceDescription, возвращает { vision_stub, analysis }\n// При замене: убрать этот нод, добавить HTTP Request к http://127.0.0.1:11434/api/generate\n// с моделью qwen2-vl и base64-изображением в поле images[]\nconst d = $input.first().json;\nconst desc = d.context?.evidenceDescription || 'Доказательства не предоставлены';\nreturn [{ json: {\n  ...d,\n  vision_analysis: {\n    vision_stub: true,\n    analysis: desc,\n    _note: 'STUB: заменить на реальную vision-модель Ollama'\n  }\n} }];"
+      },
+      "id": "1d169aaa-fdbd-4659-b4b8-926434d25ef8",
       "name": "Vision: анализ доказательств (заглушка)",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1540, 440],
-      "parameters": {
-        "jsCode": "// VISION STUB v1 — TODO: заменить на HTTP Request к vision-модели Ollama (qwen2-vl / llava)\n// Интерфейс: принимает evidenceDescription, возвращает { vision_stub, analysis }\n// При замене: убрать этот нод, добавить HTTP Request к http://127.0.0.1:11434/api/generate\n// с моделью qwen2-vl и base64-изображением в поле images[]\nconst d = $input.first().json;\nconst desc = d.context?.evidenceDescription || 'Доказательства не предоставлены';\nreturn [{ json: {\n  ...d,\n  vision_analysis: {\n    vision_stub: true,\n    analysis: desc,\n    _note: 'STUB: заменить на реальную vision-модель Ollama'\n  }\n} }];"
-      }
+      "position": [
+        1792,
+        848
+      ]
     },
     {
-      "id": "gen-prompt-rag",
+      "parameters": {
+        "jsCode": "const d = $input.first().json;\nconst ctx = d.context;\nconst prompt = `Ты — юридический ассистент по трудовому праву. Твоя задача — кратко и точно сформулировать нарушение трудовых обязанностей со ссылками на нормативные акты.\\n\\n## Данные о нарушении\\nСотрудник: ${ctx.employee?.name || '[не указано]'}\\nДолжность: ${ctx.employee?.position || '[не указано]'}\\nПодразделение: ${ctx.employee?.department || '[не указано]'}\\nДата нарушения: ${ctx.violation?.date || '[не указано]'}\\nОписание: ${ctx.violation?.description || 'Прогул — отсутствие на рабочем месте без уважительной причины'}\\nУважительная причина: ${ctx.respectableReason ? 'Есть: ' + ctx.respectableReasonComment : 'Отсутствует'}\\n\\n## Чеклист (внутренняя инструкция)\\n${d.checklist_content}\\n\\n## Нормативная база\\n${d.tk_content}\\n\\n## Задача\\nСформулируй нарушение в 2-4 предложениях для включения в служебную записку. Укажи конкретные статьи, пункты. Формат: юридически грамотно, сухо, без лишних слов.\\nОтвечай ТОЛЬКО формулировкой нарушения, без вводных фраз.`;\nreturn [{ json: { ...d, prompt_rag: prompt } }];"
+      },
+      "id": "faeb7765-f131-44e1-a04d-065a0272caa8",
       "name": "Промпт: нарушения (RAG)",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1760, 440],
-      "parameters": {
-        "jsCode": "const d = $input.first().json;\nconst ctx = d.context;\nconst prompt = `Ты — юридический ассистент по трудовому праву. Твоя задача — кратко и точно сформулировать нарушение трудовых обязанностей со ссылками на нормативные акты.\\n\\n## Данные о нарушении\\nСотрудник: ${ctx.employee?.name || '[не указано]'}\\nДолжность: ${ctx.employee?.position || '[не указано]'}\\nПодразделение: ${ctx.employee?.department || '[не указано]'}\\nДата нарушения: ${ctx.violation?.date || '[не указано]'}\\nОписание: ${ctx.violation?.description || 'Прогул — отсутствие на рабочем месте без уважительной причины'}\\nУважительная причина: ${ctx.respectableReason ? 'Есть: ' + ctx.respectableReasonComment : 'Отсутствует'}\\n\\n## Чеклист (внутренняя инструкция)\\n${d.checklist_content}\\n\\n## Нормативная база\\n${d.tk_content}\\n\\n## Задача\\nСформулируй нарушение в 2-4 предложениях для включения в служебную записку. Укажи конкретные статьи, пункты. Формат: юридически грамотно, сухо, без лишних слов.\\nОтвечай ТОЛЬКО формулировкой нарушения, без вводных фраз.`;\nreturn [{ json: { ...d, prompt_rag: prompt } }];"
-      }
+      "position": [
+        1984,
+        848
+      ]
     },
     {
-      "id": "gen-ollama-rag",
-      "name": "Ollama: нарушения",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [1980, 440],
       "parameters": {
         "method": "POST",
         "url": "http://127.0.0.1:11434/api/generate",
         "sendBody": true,
         "bodyParameters": {
           "parameters": [
-            { "name": "model", "value": "qwen2.5:7b" },
-            { "name": "prompt", "value": "={{ $json.prompt_rag }}" },
-            { "name": "stream", "value": false }
+            {
+              "name": "model",
+              "value": "qwen2.5:7b"
+            },
+            {
+              "name": "prompt",
+              "value": "={{ $json.prompt_rag }}"
+            },
+            {
+              "name": "stream",
+              "value": false
+            }
           ]
         },
-        "options": { "timeout": 60000 }
-      }
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "463c6306-954e-446a-a5b0-d6c0717fbac7",
+      "name": "Ollama: нарушения",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2208,
+        848
+      ]
     },
     {
-      "id": "gen-merge-violations",
+      "parameters": {
+        "jsCode": "const r = $input.first().json;\nconst violations = r.response?.trim() || '[Не удалось сформулировать нарушение]';\nconst prev = $('Vision: анализ доказательств (заглушка)').first().json;\nreturn [{ json: {\n  context: prev.context,\n  dates: prev.dates,\n  checklist_content: prev.checklist_content,\n  tk_content: prev.tk_content,\n  vision_analysis: prev.vision_analysis,\n  violations\n} }];"
+      },
+      "id": "4c45b245-a7a5-4cca-aa5f-d9da98e9e71e",
       "name": "Объединить нарушения",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [2200, 440],
-      "parameters": {
-        "jsCode": "const r = $input.first().json;\nconst violations = r.response?.trim() || '[Не удалось сформулировать нарушение]';\nconst prev = $('Vision: анализ доказательств (заглушка)').first().json;\nreturn [{ json: {\n  context: prev.context,\n  dates: prev.dates,\n  checklist_content: prev.checklist_content,\n  tk_content: prev.tk_content,\n  vision_analysis: prev.vision_analysis,\n  violations\n} }];"
-      }
+      "position": [
+        2432,
+        848
+      ]
     },
     {
-      "id": "gen-switch-need-act",
-      "name": "Нужен акт?",
-      "type": "n8n-nodes-base.switch",
-      "typeVersion": 3,
-      "position": [2420, 440],
       "parameters": {
-        "mode": "rules",
         "rules": {
           "values": [
             {
               "conditions": {
-                "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict", "version": 2 },
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 1
+                },
                 "conditions": [
                   {
                     "id": "cond-need-act",
                     "leftValue": "={{ $json.context.scenario }}",
                     "rightValue": "progul_ochny",
-                    "operator": { "type": "string", "operation": "equals" }
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
                   }
                 ],
                 "combinator": "and"
@@ -404,167 +285,801 @@
             }
           ]
         },
-        "options": { "fallbackOutput": "extra" }
-      }
+        "options": {
+          "fallbackOutput": "extra"
+        }
+      },
+      "id": "bb777ec0-9826-4060-9345-7846a19475d2",
+      "name": "Нужен акт?",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [
+        2640,
+        848
+      ]
     },
     {
-      "id": "gen-prompt-act",
-      "name": "Промпт: акт об отсутствии",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [2640, 360],
       "parameters": {
-        "jsCode": "// ============================================================\n// ШАБЛОН ВШИТ НАПРЯМУЮ — fs недоступен в n8n Code нодах\n// Чтобы обновить: отредактируй строку template ниже.\n// Источник: templates/act_progul.md\n// ============================================================\n\nconst template = `АКТ\nоб отсутствии работника на рабочем месте\n\nг. {{город}}, «{{день}}» {{месяц}} {{год}} г.\n\nНастоящий акт составлен в связи с отсутствием на рабочем месте работника:\n\nФИО: {{фио_работника}}\nДолжность: {{должность}}\nСтруктурное подразделение: {{подразделение}}\n\nДата отсутствия: {{дата_отсутствия}}\nВремя отсутствия: с {{время_начала}} по {{время_окончания}}\nПродолжительность отсутствия: {{продолжительность}}\n\nПопытки установить причину отсутствия:\n{{описание_попыток_связи}}\n\nПричина отсутствия: {{причина_или_не_установлена}}\n\nНастоящий акт составлен в присутствии:\n\n1. {{свидетель_1_фио}}, {{свидетель_1_должность}}  ___________\n2. {{свидетель_2_фио}}, {{свидетель_2_должность}}  ___________\n3. {{свидетель_3_фио}}, {{свидетель_3_должность}}  ___________\n\nНепосредственный руководитель:\n{{фио_руководителя}}, {{должность_руководителя}}  ___________\n\nС актом ознакомлен(а): ___________  /{{фио_работника}}/  «___» _________ {{год}} г.\n(или: от ознакомления отказался(ась), о чём составлен соответствующий акт)\n\n---\nИнструкции по заполнению:\n- {{город}} — Екатеринбург (если не указано иное)\n- {{продолжительность}} — рассчитать исходя из времени начала и окончания, исключить обед (1 час)\n- Свидетелей — оставить как {{свидетель_N_фио}} если не указаны\n- Если данных не хватает — заполнить [УТОЧНИТЬ]`;\n\nconst d = $input.first().json;\nconst ctx = d.context;\nconst today = new Date().toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' });\nconst prompt = `Ты — помощник HR-специалиста. Заполни шаблон акта об отсутствии на рабочем месте реальными данными.\\n\\n## Шаблон\\n${template}\\n\\n## Данные для заполнения\\nСотрудник (ФИО): ${ctx.employee?.name || '[УТОЧНИТЬ]'}\\nДолжность: ${ctx.employee?.position || '[УТОЧНИТЬ]'}\\nПодразделение: ${ctx.employee?.department || '[УТОЧНИТЬ]'}\\nДата отсутствия: ${ctx.violation?.date || '[УТОЧНИТЬ]'}\\nВремя отсутствия: с ${ctx.violation?.absenceStart || '09:00'} по ${ctx.violation?.absenceEnd || '18:00'}\\nПопытки связи: ${ctx.contactAttempts || 'Предприняты попытки связаться по телефону и электронной почте'}\\nУважительная причина: ${ctx.respectableReason ? ctx.respectableReasonComment : 'не установлена'}\\nДоказательства: ${d.vision_analysis?.analysis || 'не предоставлены'}\\nРуководитель (ФИО): ${ctx.manager?.name || '[УТОЧНИТЬ]'}\\nДолжность руководителя: ${ctx.manager?.position || '[УТОЧНИТЬ]'}\\nФормулировка нарушения: ${d.violations}\\nСегодняшняя дата: ${today}\\n\\n## Инструкция\\nЗаполни ВСЕ {{placeholders}} из шаблона реальными данными. Там где данных нет — поставь [УТОЧНИТЬ].\\nВерни ТОЛЬКО готовый текст акта, без пояснений и markdown-обёрток.`;\nreturn [{ json: { ...d, prompt_act: prompt } }];"
-      }
-    },
-    {
-      "id": "gen-ollama-act",
+        "method": "POST",
+        "url": "http://127.0.0.1:11434/api/generate",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "model",
+              "value": "qwen2.5:7b"
+            },
+            {
+              "name": "prompt",
+              "value": "={{ $json.prompt_act }}"
+            },
+            {
+              "name": "stream",
+              "value": false
+            }
+          ]
+        },
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "id": "5edd1eee-9f06-4507-96ce-21593be34a3d",
       "name": "Ollama: генерация акта",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [2860, 360],
-      "parameters": {
-        "method": "POST",
-        "url": "http://127.0.0.1:11434/api/generate",
-        "sendBody": true,
-        "bodyParameters": {
-          "parameters": [
-            { "name": "model", "value": "qwen2.5:7b" },
-            { "name": "prompt", "value": "={{ $json.prompt_act }}" },
-            { "name": "stream", "value": false }
-          ]
-        },
-        "options": { "timeout": 120000 }
-      }
+      "position": [
+        3104,
+        704
+      ]
     },
     {
-      "id": "gen-skip-act",
+      "parameters": {
+        "jsCode": "// Для данного сценария акт об отсутствии не требуется\n// act_text остаётся пустым — финальный вывод это учтёт\nconst d = $input.first().json;\nreturn [{ json: { ...d, act_text: '' } }];"
+      },
+      "id": "122da5ba-abdc-462d-9510-61ea2c771ef1",
       "name": "Акт не нужен",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [2640, 540],
-      "parameters": {
-        "jsCode": "// Для данного сценария акт об отсутствии не требуется\n// act_text остаётся пустым — финальный вывод это учтёт\nconst d = $input.first().json;\nreturn [{ json: { ...d, act_text: '' } }];"
-      }
+      "position": [
+        2864,
+        944
+      ]
     },
     {
-      "id": "gen-merge-act",
+      "parameters": {
+        "jsCode": "const r = $input.first().json;\n// Если пришли из Ollama — берём response\n// Если пришли из «Акт не нужен» — берём act_text (пустой)\nconst act_text = r.response?.trim() || r.act_text || '';\nconst prev = $('Объединить нарушения').first().json;\nreturn [{ json: {\n  context: prev.context,\n  dates: prev.dates,\n  vision_analysis: prev.vision_analysis,\n  violations: prev.violations,\n  act_text\n} }];"
+      },
+      "id": "b3a6fcf6-70ec-4c9b-b32f-95eac6ba0435",
       "name": "Объединить акт",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [3080, 440],
-      "parameters": {
-        "jsCode": "const r = $input.first().json;\n// Если пришли из Ollama — берём response\n// Если пришли из «Акт не нужен» — берём act_text (пустой)\nconst act_text = r.response?.trim() || r.act_text || '';\nconst prev = $('Объединить нарушения').first().json;\nreturn [{ json: {\n  context: prev.context,\n  dates: prev.dates,\n  vision_analysis: prev.vision_analysis,\n  violations: prev.violations,\n  act_text\n} }];"
-      }
+      "position": [
+        3312,
+        848
+      ]
     },
     {
-      "id": "gen-prompt-sz",
-      "name": "Промпт: служебная записка",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [3300, 440],
-      "parameters": {
-        "jsCode": "// ============================================================\n// ШАБЛОН ВШИТ НАПРЯМУЮ — fs недоступен в n8n Code нодах\n// Чтобы обновить: отредактируй строку template ниже.\n// Источник: templates/sz_progul.md\n// Для нового сценария: добавь ветку if/else по context.scenario\n// ============================================================\n\nconst template = `СЛУЖЕБНАЯ ЗАПИСКА\n\nКому: {{адресат_фио}}, {{адресат_должность}}\nОт: {{фио_руководителя}}, {{должность_руководителя}}, {{подразделение_руководителя}}\nДата: «{{день}}» {{месяц}} {{год}} г.\n\nОб отсутствии работника на рабочем месте\n\nДовожу до Вашего сведения, что «{{дата_отсутствия}}» работник {{фио_работника}}, {{должность}}, {{подразделение}}, отсутствовал(а) на рабочем месте с {{время_начала}} до {{время_окончания}} ({{продолжительность}}) без уважительной причины и без согласования с непосредственным руководителем.\n\nПредпринятые меры:\n{{описание_мер}}\n\nОбстоятельства:\n{{обстоятельства_отсутствия}}\n\nНормативная основа:\n{{нормативная_ссылка}}\n\nПо состоянию на дату составления настоящей служебной записки сведения о наличии листка нетрудоспособности или иных документов, подтверждающих уважительность причины отсутствия, отсутствуют.\n\nНа основании изложенного прошу провести служебную проверку по факту нарушения трудовой дисциплины и рассмотреть вопрос о применении к {{фио_работника_род}} дисциплинарного взыскания.\n\nПриложения:\n1. Акт об отсутствии на рабочем месте от {{дата_отсутствия}}\n{{дополнительные_приложения}}\n\n{{фио_руководителя}}  ___________  «___» _________ {{год}} г.\n\n---\nИнструкции по заполнению:\n- {{адресат_фио}} — Черепанова Т. / Касмынина О.\n- {{нормативная_ссылка}} — из violations (ТК РФ ст.81 п.6 пп.а, ПВТР, трудовой договор)\n- {{фио_работника_род}} — родительный падеж ФИО\n- Если данных не хватает — заполнить [УТОЧНИТЬ]`;\nconst d = $input.first().json;\nconst ctx = d.context;\nconst today = new Date().toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' });\nconst prompt = `Ты — помощник HR-специалиста. Заполни шаблон служебной записки реальными данными.\\n\\n## Шаблон\\n${template}\\n\\n## Данные для заполнения\\nСотрудник (ФИО): ${ctx.employee?.name || '[УТОЧНИТЬ]'}\\nДолжность: ${ctx.employee?.position || '[УТОЧНИТЬ]'}\\nПодразделение: ${ctx.employee?.department || '[УТОЧНИТЬ]'}\\nДата нарушения: ${ctx.violation?.date || '[УТОЧНИТЬ]'}\\nВремя отсутствия: с ${ctx.violation?.absenceStart || '09:00'} по ${ctx.violation?.absenceEnd || '18:00'}\\nРуководитель (ФИО): ${ctx.manager?.name || '[УТОЧНИТЬ]'}\\nДолжность руководителя: ${ctx.manager?.position || '[УТОЧНИТЬ]'}\\nПодразделение руководителя: ${ctx.manager?.department || ctx.employee?.department || '[УТОЧНИТЬ]'}\\nУважительная причина: ${ctx.respectableReason ? ctx.respectableReasonComment : 'не установлена'}\\nПредпринятые меры: ${ctx.contactAttempts || 'Предприняты попытки связаться по телефону и электронной почте'}\\nДоказательства: ${d.vision_analysis?.analysis || 'не предоставлены'}\\nФормулировка нарушения: ${d.violations}\\nАкт об отсутствии: ${d.act_text ? 'составлен' : 'не составлен'}\\nСегодняшняя дата: ${today}\\n\\n## Инструкция\\nЗаполни ВСЕ {{placeholders}} из шаблона реальными данными. Там где данных нет — поставь [УТОЧНИТЬ].\\nВерни ТОЛЬКО готовый текст служебной записки, без пояснений и markdown-обёрток.`;\nreturn [{ json: { ...d, prompt_sz: prompt } }];"
-      }
-    },
-    {
-      "id": "gen-ollama-sz",
-      "name": "Ollama: генерация СЗ",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [3520, 440],
       "parameters": {
         "method": "POST",
         "url": "http://127.0.0.1:11434/api/generate",
         "sendBody": true,
         "bodyParameters": {
           "parameters": [
-            { "name": "model", "value": "qwen2.5:7b" },
-            { "name": "prompt", "value": "={{ $json.prompt_sz }}" },
-            { "name": "stream", "value": false }
+            {
+              "name": "model",
+              "value": "qwen2.5:7b"
+            },
+            {
+              "name": "prompt",
+              "value": "={{ $json.prompt_sz }}"
+            },
+            {
+              "name": "stream",
+              "value": false
+            }
           ]
         },
-        "options": { "timeout": 120000 }
-      }
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "id": "bfdafe1f-2001-4568-857e-4f85e5f552f8",
+      "name": "Ollama: генерация СЗ",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3744,
+        848
+      ]
     },
     {
-      "id": "gen-final-output",
+      "parameters": {
+        "jsCode": "const r = $input.first().json;\nconst sz_text = r.response?.trim() || '[Не удалось сгенерировать служебную записку]';\nconst prev = $('Объединить акт').first().json;\nconst actBlock = prev.act_text\n  ? `📋 АКТ ОБ ОТСУТСТВИИ НА РАБОЧЕМ МЕСТЕ\\n\\n${prev.act_text}\\n\\n---\\n\\n`\n  : '';\nconst output = `✅ Документы сформированы!\\n\\n---\\n\\n${actBlock}📝 СЛУЖЕБНАЯ ЗАПИСКА\\n\\n${sz_text}\\n\\n---\\n\\n⚠️ Проверьте документы перед отправкой. Поля [УТОЧНИТЬ] требуют вашего заполнения.\\nПосле проверки — передайте пакет Черепановой Т. или Касмыниной О.`;\nreturn [{ json: { output, act_text: prev.act_text, sz_text } }];"
+      },
+      "id": "9800732a-428f-4757-941a-ff1b85e14944",
       "name": "Финальный ответ",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [3740, 440],
+      "position": [
+        3968,
+        848
+      ]
+    },
+    {
       "parameters": {
-        "jsCode": "const r = $input.first().json;\nconst sz_text = r.response?.trim() || '[Не удалось сгенерировать служебную записку]';\nconst prev = $('Объединить акт').first().json;\nconst actBlock = prev.act_text\n  ? `📋 АКТ ОБ ОТСУТСТВИИ НА РАБОЧЕМ МЕСТЕ\\n\\n${prev.act_text}\\n\\n---\\n\\n`\n  : '';\nconst output = `✅ Документы сформированы!\\n\\n---\\n\\n${actBlock}📝 СЛУЖЕБНАЯ ЗАПИСКА\\n\\n${sz_text}\\n\\n---\\n\\n⚠️ Проверьте документы перед отправкой. Поля [УТОЧНИТЬ] требуют вашего заполнения.\\nПосле проверки — передайте пакет Черепановой Т. или Касмыниной О.`;\nreturn [{ json: { output, act_text: prev.act_text, sz_text } }];"
-      }
+        "content": "### Тут возможно первое обращение в RAG\n\nДанные: ТК РФ\nЗадача: Провека на истекшесть дела. Проверяем дату обнаружения и дату самого проступка\n",
+        "height": 212,
+        "width": 212
+      },
+      "id": "a683c66f-ada9-48e8-94c6-7f5fe1c1043a",
+      "name": "📌 HR Generate — всё в одном1",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        656,
+        1088
+      ]
+    },
+    {
+      "parameters": {
+        "content": "### Выбираем сценарий, по которому пойдет процесс\n\nСейчас реализован только один сценарий - **Очный прогул**\n",
+        "height": 212,
+        "width": 180
+      },
+      "id": "9503f9f0-ee93-499a-a535-3d47b04808f0",
+      "name": "📌 HR Generate — всё в одном5",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1280,
+        1008
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const r = $input.first().json;\nconst prev = $('Нормализовать данные').first().json;\nreturn [{ json: {\n  context: prev.context,\n  dates: {\n    isExpired: r.is_expired === true || r.is_expired === 'true',\n    expiredReason: r.expired_reason || null,\n    violationDeadline: r.violation_deadline,\n    discoveryDeadline: r.discovery_deadline\n  }\n} }];"
+      },
+      "id": "67e48624-9a76-4ba3-9b20-0f3eff614ffe",
+      "name": "Формат дат",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        896,
+        704
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Обновить: отредактируй checklist и tk ниже\n// Источники: knowledge/progul_checklist.md, knowledge/progul_tk193.md\n\nconst checklist = `# Чеклист: Прогул\n\n## Квалификация\nОтсутствие работника на рабочем месте без уважительной причины или без согласования с непосредственным руководителем — дисциплинарное нарушение.\nВажно: обеденное время не засчитывается. При длительном прогуле исключаются: дни на больничном, в согласованном отпуске, выходные, праздники, дни командировки.\n\n## Порядок действий\n\nШаг 1. Свяжись с работником\n- Позвони по известному номеру телефона (в т.ч. из корпоративного справочника Стафф)\n- Если не выходит на связь — позвони родственникам по номерам из анкеты при трудоустройстве\n- Сделай запрос на корпоративную электронную почту работника\n- Используй соцсети, чтобы понять причину невыхода\n\nШаг 2. Зафиксируй неявку\n- Составь акт об отсутствии на рабочем месте в конце рабочего дня\n- В акте укажи ФИО трёх работников-свидетелей\n- Если работник не вышел на следующий день — повтори процедуру\n\nШаг 3. Передай информацию в отдел кадрового учёта\n- Сообщи Касмыниной Ольге или Черепановой Татьяне\n- В табеле будет проставлено: НН\n\nШаг 4. Инициируй служебную проверку\nПодготовь служебную записку:\n- ФИО и должность/подразделение работника\n- Дата и время отсутствия\n- Предпринятые меры\n- Обстоятельства отсутствия\n- Отсутствие больничного из Экстерн\n- Предложение о вынесении дисциплинарного взыскания\n\nШаг 5. Ожидай результаты служебной проверки\n\n## Нормативная основа\n- ТК РФ ст. 81 ч. 1 п. 6 пп. а\n- ТК РФ ст. 193\n- ПВТР Контура п. 13.2.1`;\n\nconst tk = `# ТК РФ — Статья 193\n\nДо применения дисциплинарного взыскания работодатель должен затребовать от работника письменное объяснение. Если по истечении двух рабочих дней объяснение не предоставлено — составляется акт.\n\nДисциплинарное взыскание применяется не позднее одного месяца со дня обнаружения проступка.\nДисциплинарное взыскание не может быть применено позднее шести месяцев со дня совершения проступка.\n\n## Буферные сроки (внутренние, Контур)\n// Внутреннее решение — не ТК РФ. Уточнять у Касмыниной О.\n- 5 месяцев 15 дней от даты совершения (вместо 6 месяцев)\n- 20 календарных дней от даты обнаружения (вместо 30 дней)\n\n## Нормативная основа для документов\n- ТК РФ ст. 81 ч. 1 п. 6 пп. а — прогул (отсутствие > 4 часов)\n- ТК РФ ст. 193 — порядок привлечения\n- ПВТР Контура — режим работы\n- Трудовой договор — рабочее место и режим`;\n\nconst d = $input.first().json;\nreturn [{ json: { ...d, checklist_content: checklist, tk_content: tk } }];"
+      },
+      "id": "99a3c14f-0f2f-4d9c-b0b5-cbf52899afdc",
+      "name": "Прочитать данные прогула1",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1568,
+        752
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// ШАБЛОН ВШИТ — fs недоступен в n8n\n// Обновить: отредактируй template ниже\n// Источник: templates/act_progul.md\n\nconst template = `АКТ\nоб отсутствии работника на рабочем месте\n\nг. {{город}}, «{{день}}» {{месяц}} {{год}} г.\n\nНастоящий акт составлен в связи с отсутствием на рабочем месте работника:\n\nФИО: {{фио_работника}}\nДолжность: {{должность}}\nСтруктурное подразделение: {{подразделение}}\n\nДата отсутствия: {{дата_отсутствия}}\nВремя отсутствия: с {{время_начала}} по {{время_окончания}}\nПродолжительность отсутствия: {{продолжительность}}\n\nПопытки установить причину отсутствия:\n{{описание_попыток_связи}}\n\nПричина отсутствия: {{причина_или_не_установлена}}\n\nНастоящий акт составлен в присутствии:\n1. {{свидетель_1_фио}}, {{свидетель_1_должность}}  ___________\n2. {{свидетель_2_фио}}, {{свидетель_2_должность}}  ___________\n3. {{свидетель_3_фио}}, {{свидетель_3_должность}}  ___________\n\nНепосредственный руководитель:\n{{фио_руководителя}}, {{должность_руководителя}}  ___________\n\nС актом ознакомлен(а): ___________  /{{фио_работника}}/  «___» _________ {{год}} г.\n\n---\nИнструкции:\n- {{город}} — Екатеринбург если не указано иное\n- {{продолжительность}} — рассчитать из времени начала/окончания, исключить обед (1 час)\n- Свидетелей — оставить как {{свидетель_N_фио}} если не указаны\n- Нет данных — ставить [УТОЧНИТЬ]`;\n\nconst d = $input.first().json;\nconst ctx = d.context;\nconst today = new Date().toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' });\n\nconst prompt = `Ты — помощник HR-специалиста. Заполни шаблон акта об отсутствии на рабочем месте реальными данными.\n\n## Шаблон\n${template}\n\n## Данные для заполнения\nСотрудник (ФИО): ${ctx.employee?.name || '[УТОЧНИТЬ]'}\nДолжность: ${ctx.employee?.position || '[УТОЧНИТЬ]'}\nПодразделение: ${ctx.employee?.department || '[УТОЧНИТЬ]'}\nДата отсутствия: ${ctx.violation?.date || '[УТОЧНИТЬ]'}\nВремя отсутствия: с ${ctx.violation?.absenceStart || '09:00'} по ${ctx.violation?.absenceEnd || '18:00'}\nПопытки связи: ${ctx.contactAttempts || 'Предприняты попытки связаться по телефону и электронной почте'}\nУважительная причина: ${ctx.respectableReason ? ctx.respectableReasonComment : 'не установлена'}\nДоказательства: ${d.vision_analysis?.analysis || 'не предоставлены'}\nРуководитель (ФИО): ${ctx.manager?.name || '[УТОЧНИТЬ]'}\nДолжность руководителя: ${ctx.manager?.position || '[УТОЧНИТЬ]'}\nФормулировка нарушения: ${d.violations}\nСегодняшняя дата: ${today}\n\n## Инструкция\nЗаполни ВСЕ {{placeholders}} реальными данными. Нет данных — [УТОЧНИТЬ].\nВерни ТОЛЬКО готовый текст акта, без пояснений и markdown-обёрток.`;\n\nreturn [{ json: { ...d, prompt_act: prompt } }];"
+      },
+      "id": "7cd84d4e-e612-4bf3-94ee-3e9ea372c63e",
+      "name": "Промпт: акт об отсутствии1",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2864,
+        720
+      ]
+    },
+    {
+      "parameters": {
+        "content": "**Вызов из агента**\nТочка входа. Принимает данные от hr_agent через toolWorkflow. Всё приходит в $json.",
+        "height": 154,
+        "width": 200,
+        "color": 6
+      },
+      "id": "e2b181b9-6622-4633-bb36-1518d64465cc",
+      "name": " ",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        128,
+        864
+      ]
+    },
+    {
+      "parameters": {
+        "content": "**Нормализовать данные**\nРаспаковывает $json.query (от toolWorkflow). Проверяет наличие employee и violation.",
+        "height": 154,
+        "width": 200,
+        "color": 6
+      },
+      "id": "5ba450c3-b88d-46c1-b98a-43cd7394974b",
+      "name": "  ",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        432,
+        496
+      ]
+    },
+    {
+      "parameters": {
+        "content": "**PostgreSQL: проверить сроки**\nSQL по ТК ст.193. Дедлайны: 5м15д от нарушения, 20д от обнаружения (буфер Контура).",
+        "height": 170,
+        "width": 200,
+        "color": 6
+      },
+      "id": "8a2191a2-137b-4c45-b433-f10e27800fd3",
+      "name": "   ",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        656,
+        880
+      ]
+    },
+    {
+      "parameters": {
+        "content": "**Формат дат**\nПриводит результат SQL к { isExpired, expiredReason, violationDeadline, discoveryDeadline }.",
+        "height": 170,
+        "width": 184,
+        "color": 6
+      },
+      "id": "173abb5f-78c5-4e4c-b927-8ba4a47e60c9",
+      "name": "    ",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        880,
+        480
+      ]
+    },
+    {
+      "parameters": {
+        "content": "**Срок не истёк?**\nIF: isExpired=true → ветка «нельзя привлечь». false → продолжаем генерацию.",
+        "height": 186,
+        "width": 184,
+        "color": 6
+      },
+      "id": "a1d1c890-3d16-433e-a3bd-ba732ecd7617",
+      "name": "     ",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1056,
+        848
+      ]
+    },
+    {
+      "parameters": {
+        "content": "**Срок истёк — ответ**\nФормирует сообщение с указанием какой срок истёк. Возвращает { output }.\n\nОбратиться к Касмыниной или Черепановой",
+        "height": 218,
+        "width": 248,
+        "color": 3
+      },
+      "id": "2dd303db-16f8-4a11-9b6f-cc9371585e58",
+      "name": "      ",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1344,
+        288
+      ]
+    },
+    {
+      "parameters": {
+        "content": "**Прочитать данные прогула**\nЧеклист + ТК ст.193 вшиты в код. Добавляет needAct=true и checklist_content, tk_content.",
+        "height": 180,
+        "width": 184,
+        "color": 6
+      },
+      "id": "048d462c-7310-420c-b79f-0680d1e2e64b",
+      "name": "        ",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1568,
+        560
+      ]
+    },
+    {
+      "parameters": {
+        "content": "**Сценарий: заглушка**\nTODO. Возвращает пустые данные + сообщение что сценарий не реализован.",
+        "height": 90,
+        "width": 200,
+        "color": 3
+      },
+      "id": "035a7887-0871-490e-9786-46bf7f880772",
+      "name": "         ",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1568,
+        1136
+      ]
+    },
+    {
+      "parameters": {
+        "content": "**Vision: заглушка**\nSTUB. Передаёт evidenceDescription как analysis. Заменить на HTTP Request к qwen2-vl/llava.",
+        "height": 138,
+        "width": 216,
+        "color": 3
+      },
+      "id": "23e1cc38-037f-41c6-ac87-c519b3f5296d",
+      "name": "          ",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1792,
+        688
+      ]
+    },
+    {
+      "parameters": {
+        "content": "**Промпт: RAG**\nСобирает промпт: данные о сотруднике + чеклист + ТК. Результат → prompt_rag.",
+        "height": 154,
+        "width": 200,
+        "color": 6
+      },
+      "id": "cbf76d9a-fa4e-4758-aad0-29c833f83b90",
+      "name": "           ",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1984,
+        1024
+      ]
+    },
+    {
+      "parameters": {
+        "content": "**Ollama: нарушения**\nHTTP POST к qwen2.5:7b. Формулирует нарушение со ссылками на ТК. Таймаут 60с.",
+        "height": 186,
+        "width": 200,
+        "color": 6
+      },
+      "id": "8763f781-7020-4c3a-ad45-0fbd284cd817",
+      "name": "            ",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        2208,
+        640
+      ]
+    },
+    {
+      "parameters": {
+        "content": "**Объединить нарушения**\nБерёт violations из Ollama. Восстанавливает полный контекст из Vision-нода по имени.",
+        "height": 170,
+        "width": 200,
+        "color": 6
+      },
+      "id": "ef46b048-1848-425c-97ae-3ceda0768121",
+      "name": "             ",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        2416,
+        1008
+      ]
+    },
+    {
+      "parameters": {
+        "content": "**Нужен акт?**\nSwitch: progul_ochny → генерируем акт. Остальные сценарии → пропускаем.",
+        "height": 154,
+        "width": 200,
+        "color": 6
+      },
+      "id": "bfb224f6-9d63-42de-b99d-e74d70e40f60",
+      "name": "              ",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        2576,
+        656
+      ]
+    },
+    {
+      "parameters": {
+        "content": "**Промпт: акт**\nШаблон акта вшит в код. Собирает промпт с данными о сотруднике и нарушении.",
+        "height": 122,
+        "width": 200,
+        "color": 6
+      },
+      "id": "75fa271d-20fb-4f51-a624-f47785aa5635",
+      "name": "               ",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        2864,
+        576
+      ]
+    },
+    {
+      "parameters": {
+        "content": "**Ollama: акт**\nHTTP POST к qwen2.5:7b. Заполняет шаблон акта реальными данными. Таймаут 120с.",
+        "height": 122,
+        "width": 200,
+        "color": 6
+      },
+      "id": "26bf670c-d02f-48bd-9232-719cfeef7a96",
+      "name": "                ",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        3104,
+        576
+      ]
+    },
+    {
+      "parameters": {
+        "content": "**Акт не нужен**\nПробрасывает данные дальше с act_text=''. Для сценариев без акта об отсутствии.",
+        "height": 122,
+        "width": 216,
+        "color": 6
+      },
+      "id": "7ce87700-5746-44d1-866f-27dbb228104d",
+      "name": "                 ",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        2848,
+        1104
+      ]
+    },
+    {
+      "parameters": {
+        "content": "**Объединить акт**\nБерёт act_text из Ollama или пустую строку. Восстанавливает контекст из Объединить нарушения.",
+        "height": 186,
+        "width": 168,
+        "color": 6
+      },
+      "id": "a6120534-be04-4421-90aa-7f14c9d50a99",
+      "name": "                  ",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        3312,
+        976
+      ]
+    },
+    {
+      "parameters": {
+        "content": "**Промпт: СЗ**\nШаблон СЗ вшит в код. Включает violations и act_text в промпт для служебной записки.",
+        "height": 154,
+        "width": 168,
+        "color": 6
+      },
+      "id": "afc97ff0-9a27-4848-8677-35ca6ec5a181",
+      "name": "                   ",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        3520,
+        656
+      ]
+    },
+    {
+      "parameters": {
+        "content": "**Ollama: СЗ**\nHTTP POST к qwen2.5:7b. Заполняет шаблон служебной записки. Таймаут 120с.",
+        "height": 154,
+        "width": 216,
+        "color": 6
+      },
+      "id": "82b9cf14-6356-449a-b22e-d74cdf3ef1df",
+      "name": "                    ",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        3728,
+        1008
+      ]
+    },
+    {
+      "parameters": {
+        "content": "**Финальный ответ**\nСобирает итоговое сообщение с актом + СЗ. Возвращает { output, act_text, sz_text } агенту.",
+        "height": 154,
+        "width": 184,
+        "color": 6
+      },
+      "id": "e845d749-1d98-4cb0-8adc-007f02a154d7",
+      "name": "                     ",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        3968,
+        672
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// ШАБЛОН ВШИТ — fs недоступен в n8n\n// Обновить: отредактируй template ниже\n// Источник: templates/sz_progul.md\n\nconst template = `СЛУЖЕБНАЯ ЗАПИСКА\n\nКому: {{адресат_фио}}, {{адресат_должность}}\nОт: {{фио_руководителя}}, {{должность_руководителя}}, {{подразделение_руководителя}}\nДата: «{{день}}» {{месяц}} {{год}} г.\n\nОб отсутствии работника на рабочем месте\n\nДовожу до Вашего сведения, что «{{дата_отсутствия}}» работник {{фио_работника}}, {{должность}}, {{подразделение}}, отсутствовал(а) на рабочем месте с {{время_начала}} до {{время_окончания}} ({{продолжительность}}) без уважительной причины и без согласования с непосредственным руководителем.\n\nПредпринятые меры:\n{{описание_мер}}\n\nОбстоятельства:\n{{обстоятельства_отсутствия}}\n\nНормативная основа:\n{{нормативная_ссылка}}\n\nПо состоянию на дату составления настоящей служебной записки сведения о наличии листка нетрудоспособности или иных документов, подтверждающих уважительность причины отсутствия, отсутствуют.\n\nНа основании изложенного прошу провести служебную проверку по факту нарушения трудовой дисциплины и рассмотреть вопрос о применении к {{фио_работника_род}} дисциплинарного взыскания.\n\nПриложения:\n1. Акт об отсутствии на рабочем месте от {{дата_отсутствия}}\n{{дополнительные_приложения}}\n\n{{фио_руководителя}}  ___________  «___» _________ {{год}} г.\n\n---\nИнструкции:\n- {{адресат_фио}} — Черепанова Т. / Касмынина О.\n- {{нормативная_ссылка}} — из violations (ТК РФ ст.81 п.6 пп.а, ПВТР, трудовой договор)\n- {{фио_работника_род}} — родительный падеж ФИО\n- Нет данных — ставить [УТОЧНИТЬ]`;\n\nconst d = $input.first().json;\nconst ctx = d.context;\nconst today = new Date().toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' });\n\nconst prompt = `Ты — помощник HR-специалиста. Заполни шаблон служебной записки реальными данными.\n\n## Шаблон\n${template}\n\n## Данные для заполнения\nСотрудник (ФИО): ${ctx.employee?.name || '[УТОЧНИТЬ]'}\nДолжность: ${ctx.employee?.position || '[УТОЧНИТЬ]'}\nПодразделение: ${ctx.employee?.department || '[УТОЧНИТЬ]'}\nДата нарушения: ${ctx.violation?.date || '[УТОЧНИТЬ]'}\nВремя отсутствия: с ${ctx.violation?.absenceStart || '09:00'} по ${ctx.violation?.absenceEnd || '18:00'}\nРуководитель (ФИО): ${ctx.manager?.name || '[УТОЧНИТЬ]'}\nДолжность руководителя: ${ctx.manager?.position || '[УТОЧНИТЬ]'}\nПодразделение руководителя: ${ctx.manager?.department || ctx.employee?.department || '[УТОЧНИТЬ]'}\nУважительная причина: ${ctx.respectableReason ? ctx.respectableReasonComment : 'не установлена'}\nПредпринятые меры: ${ctx.contactAttempts || 'Предприняты попытки связаться по телефону и электронной почте'}\nДоказательства: ${d.vision_analysis?.analysis || 'не предоставлены'}\nФормулировка нарушения: ${d.violations}\nАкт об отсутствии: ${d.act_text ? 'составлен' : 'не составлен'}\nСегодняшняя дата: ${today}\n\n## Инструкция\nЗаполни ВСЕ {{placeholders}} реальными данными. Нет данных — [УТОЧНИТЬ].\nВерни ТОЛЬКО готовый текст служебной записки, без пояснений и markdown-обёрток.`;\n\nreturn [{ json: { ...d, prompt_sz: prompt } }];"
+      },
+      "id": "212df917-0d3c-46ed-8799-38a4d90fe5ac",
+      "name": "Промпт: служебная записка2",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3520,
+        816
+      ]
     }
   ],
+  "pinData": {
+    "Вызов из агента": [
+      {
+        "json": {
+          "scenario": "progul_ochny",
+          "employee": {
+            "name": "Иванов Иван Иванович",
+            "position": "менеджер проектов",
+            "department": "ООП (общий отдел продаж)"
+          },
+          "violation": {
+            "date": "2026-06-09",
+            "discoveryDate": "2026-06-09",
+            "absenceStart": "08:00",
+            "absenceEnd": "17:00",
+            "description": "Полный рабочий день"
+          },
+          "respectableReason": false,
+          "respectableReasonComment": "",
+          "evidenceDescription": "Скриншоты СКУД, сфотканные несколько раз в течение дня с фиксацией времени.",
+          "contactAttempts": "Не удалось связаться",
+          "manager": {
+            "name": "Иванов Иван Иванович",
+            "position": "менеджер проектов"
+          }
+        }
+      }
+    ]
+  },
   "connections": {
     "Вызов из агента": {
-      "main": [[{ "node": "Нормализовать данные", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Нормализовать данные",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Нормализовать данные": {
-      "main": [[{ "node": "PostgreSQL: проверить сроки", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "PostgreSQL: проверить сроки",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "PostgreSQL: проверить сроки": {
-      "main": [[{ "node": "Формат дат", "type": "main", "index": 0 }]]
-    },
-    "Формат дат": {
-      "main": [[{ "node": "Срок не истёк?", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Формат дат",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Срок не истёк?": {
       "main": [
-        [{ "node": "Срок истёк — ответ", "type": "main", "index": 0 }],
-        [{ "node": "Выбор сценария", "type": "main", "index": 0 }]
+        [
+          {
+            "node": "Срок истёк — ответ",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Выбор сценария",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Выбор сценария": {
       "main": [
-        [{ "node": "Прочитать данные прогула", "type": "main", "index": 0 }],
-        [{ "node": "Сценарий: заглушка", "type": "main", "index": 0 }]
+        [
+          {
+            "node": "Прочитать данные прогула1",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Сценарий: заглушка",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
-    "Прочитать данные прогула": {
-      "main": [[{ "node": "Vision: анализ доказательств (заглушка)", "type": "main", "index": 0 }]]
-    },
     "Сценарий: заглушка": {
-      "main": [[{ "node": "Vision: анализ доказательств (заглушка)", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Vision: анализ доказательств (заглушка)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Vision: анализ доказательств (заглушка)": {
-      "main": [[{ "node": "Промпт: нарушения (RAG)", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Промпт: нарушения (RAG)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Промпт: нарушения (RAG)": {
-      "main": [[{ "node": "Ollama: нарушения", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Ollama: нарушения",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Ollama: нарушения": {
-      "main": [[{ "node": "Объединить нарушения", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Объединить нарушения",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Объединить нарушения": {
-      "main": [[{ "node": "Нужен акт?", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Нужен акт?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Нужен акт?": {
       "main": [
-        [{ "node": "Промпт: акт об отсутствии", "type": "main", "index": 0 }],
-        [{ "node": "Акт не нужен", "type": "main", "index": 0 }]
+        [
+          {
+            "node": "Промпт: акт об отсутствии1",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Акт не нужен",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
-    "Промпт: акт об отсутствии": {
-      "main": [[{ "node": "Ollama: генерация акта", "type": "main", "index": 0 }]]
-    },
     "Ollama: генерация акта": {
-      "main": [[{ "node": "Объединить акт", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Объединить акт",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Акт не нужен": {
-      "main": [[{ "node": "Объединить акт", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Объединить акт",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Объединить акт": {
-      "main": [[{ "node": "Промпт: служебная записка", "type": "main", "index": 0 }]]
-    },
-    "Промпт: служебная записка": {
-      "main": [[{ "node": "Ollama: генерация СЗ", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Промпт: служебная записка2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Ollama: генерация СЗ": {
-      "main": [[{ "node": "Финальный ответ", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Финальный ответ",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Формат дат": {
+      "main": [
+        [
+          {
+            "node": "Срок не истёк?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Прочитать данные прогула1": {
+      "main": [
+        [
+          {
+            "node": "Vision: анализ доказательств (заглушка)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Промпт: акт об отсутствии1": {
+      "main": [
+        [
+          {
+            "node": "Ollama: генерация акта",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Промпт: служебная записка2": {
+      "main": [
+        [
+          {
+            "node": "Ollama: генерация СЗ",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
-  "id": "HR-GENERATE-V4-01"
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "a8a0b743-ad39-48fd-b0fe-cbfe578b52f0",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "9a987c8c5e53be071f8410e33526cc5ade2a52fb0a040cf9a29e79d0943782f4"
+  },
+  "id": "VSXqMIrZYbAFUGYk",
+  "tags": []
 }
