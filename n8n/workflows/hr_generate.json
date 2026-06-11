@@ -30,6 +30,174 @@
       }
     },
     {
+      "id": "note-trigger",
+      "name": " ",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [0, 420],
+      "parameters": { "content": "**Вызов из агента**\nТочка входа. Принимает данные от hr_agent через toolWorkflow. Всё приходит в $json.", "height": 90, "width": 200, "color": 6 }
+    },
+    {
+      "id": "note-normalize",
+      "name": "  ",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [220, 420],
+      "parameters": { "content": "**Нормализовать данные**\nРаспаковывает $json.query (от toolWorkflow). Проверяет наличие employee и violation.", "height": 90, "width": 200, "color": 6 }
+    },
+    {
+      "id": "note-check-dates",
+      "name": "   ",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [440, 420],
+      "parameters": { "content": "**PostgreSQL: проверить сроки**\nSQL по ТК ст.193. Дедлайны: 5м15д от нарушения, 20д от обнаружения (буфер Контура).", "height": 90, "width": 200, "color": 6 }
+    },
+    {
+      "id": "note-format-dates",
+      "name": "    ",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [660, 420],
+      "parameters": { "content": "**Формат дат**\nПриводит результат SQL к { isExpired, expiredReason, violationDeadline, discoveryDeadline }.", "height": 90, "width": 200, "color": 6 }
+    },
+    {
+      "id": "note-if-expired",
+      "name": "     ",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [880, 420],
+      "parameters": { "content": "**Срок не истёк?**\nIF: isExpired=true → ветка «нельзя привлечь». false → продолжаем генерацию.", "height": 90, "width": 200, "color": 6 }
+    },
+    {
+      "id": "note-expired-output",
+      "name": "      ",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [1100, 40],
+      "parameters": { "content": "**Срок истёк — ответ**\nФормирует сообщение с указанием какой срок истёк. Возвращает { output }.", "height": 90, "width": 200, "color": 3 }
+    },
+    {
+      "id": "note-switch-scenario",
+      "name": "       ",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [1100, 560],
+      "parameters": { "content": "**Выбор сценария**\nSwitch по context.scenario. progul_ochny → своя ветка. Остальные → заглушка.", "height": 90, "width": 200, "color": 6 }
+    },
+    {
+      "id": "note-read-progul",
+      "name": "        ",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [1320, 480],
+      "parameters": { "content": "**Прочитать данные прогула**\nЧеклист + ТК ст.193 вшиты в код. Добавляет needAct=true и checklist_content, tk_content.", "height": 100, "width": 200, "color": 6 }
+    },
+    {
+      "id": "note-scenario-stub",
+      "name": "         ",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [1320, 660],
+      "parameters": { "content": "**Сценарий: заглушка**\nTODO. Возвращает пустые данные + сообщение что сценарий не реализован.", "height": 90, "width": 200, "color": 3 }
+    },
+    {
+      "id": "note-vision-stub",
+      "name": "          ",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [1540, 560],
+      "parameters": { "content": "**Vision: заглушка**\nSTUB. Передаёт evidenceDescription как analysis. Заменить на HTTP Request к qwen2-vl/llava.", "height": 90, "width": 200, "color": 3 }
+    },
+    {
+      "id": "note-prompt-rag",
+      "name": "           ",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [1760, 560],
+      "parameters": { "content": "**Промпт: RAG**\nСобирает промпт: данные о сотруднике + чеклист + ТК. Результат → prompt_rag.", "height": 90, "width": 200, "color": 6 }
+    },
+    {
+      "id": "note-ollama-rag",
+      "name": "            ",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [1980, 560],
+      "parameters": { "content": "**Ollama: нарушения**\nHTTP POST к qwen2.5:7b. Формулирует нарушение со ссылками на ТК. Таймаут 60с.", "height": 90, "width": 200, "color": 6 }
+    },
+    {
+      "id": "note-merge-violations",
+      "name": "             ",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [2200, 560],
+      "parameters": { "content": "**Объединить нарушения**\nБерёт violations из Ollama. Восстанавливает полный контекст из Vision-нода по имени.", "height": 90, "width": 200, "color": 6 }
+    },
+    {
+      "id": "note-switch-need-act",
+      "name": "              ",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [2420, 560],
+      "parameters": { "content": "**Нужен акт?**\nSwitch: progul_ochny → генерируем акт. Остальные сценарии → пропускаем.", "height": 90, "width": 200, "color": 6 }
+    },
+    {
+      "id": "note-prompt-act",
+      "name": "               ",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [2640, 480],
+      "parameters": { "content": "**Промпт: акт**\nШаблон акта вшит в код. Собирает промпт с данными о сотруднике и нарушении.", "height": 90, "width": 200, "color": 6 }
+    },
+    {
+      "id": "note-ollama-act",
+      "name": "                ",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [2860, 480],
+      "parameters": { "content": "**Ollama: акт**\nHTTP POST к qwen2.5:7b. Заполняет шаблон акта реальными данными. Таймаут 120с.", "height": 90, "width": 200, "color": 6 }
+    },
+    {
+      "id": "note-skip-act",
+      "name": "                 ",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [2640, 660],
+      "parameters": { "content": "**Акт не нужен**\nПробрасывает данные дальше с act_text=''. Для сценариев без акта об отсутствии.", "height": 90, "width": 200, "color": 6 }
+    },
+    {
+      "id": "note-merge-act",
+      "name": "                  ",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [3080, 560],
+      "parameters": { "content": "**Объединить акт**\nБерёт act_text из Ollama или пустую строку. Восстанавливает контекст из Объединить нарушения.", "height": 90, "width": 200, "color": 6 }
+    },
+    {
+      "id": "note-prompt-sz",
+      "name": "                   ",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [3300, 560],
+      "parameters": { "content": "**Промпт: СЗ**\nШаблон СЗ вшит в код. Включает violations и act_text в промпт для служебной записки.", "height": 90, "width": 200, "color": 6 }
+    },
+    {
+      "id": "note-ollama-sz",
+      "name": "                    ",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [3520, 560],
+      "parameters": { "content": "**Ollama: СЗ**\nHTTP POST к qwen2.5:7b. Заполняет шаблон служебной записки. Таймаут 120с.", "height": 90, "width": 200, "color": 6 }
+    },
+    {
+      "id": "note-final-output",
+      "name": "                     ",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [3740, 560],
+      "parameters": { "content": "**Финальный ответ**\nСобирает итоговое сообщение с актом + СЗ. Возвращает { output, act_text, sz_text } агенту.", "height": 90, "width": 200, "color": 6 }
+    },
+    {
       "id": "gen-trigger",
       "name": "Вызов из агента",
       "type": "n8n-nodes-base.executeWorkflowTrigger",
