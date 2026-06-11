@@ -1,6 +1,6 @@
 ---
 name: project-architecture
-description: "Архитектура n8n workflow v2 (AI Agent), инфраструктура, команды запуска и открытые вопросы HR-ассистента"
+description: "Архитектура n8n workflow v4 (hr_agent + hr_generate), проверка сроков в агенте через calc_deadlines, инфраструктура, открытые вопросы"
 metadata:
   type: project
 ---
@@ -9,100 +9,115 @@ metadata:
 
 | Сервис | Команда | Статус |
 |--------|---------|--------|
-| PostgreSQL 16 | `brew services start postgresql@16` | ✅ Авто-старт |
 | Ollama | `brew services start ollama` | ✅ Авто-старт |
 | n8n 2.10.3 | `n8n start` | ▶️ Ручной запуск |
 | qwen2.5:7b | уже скачана в Ollama | ✅ Готова |
 | nomic-embed-text | уже в Ollama | ✅ Готова |
+| PostgreSQL 16 | `brew services start postgresql@16` | ⚠️ Создана, в workflow не используется |
 
-**Единая команда запуска всего окружения:**
+**Запуск окружения вручную:**
 ```bash
-cd ~/Documents/Projects/hr-consultant && ./start.sh
+brew services start ollama          # обычно уже авто-старт
+n8n start                           # http://localhost:5678
 ```
-Скрипт также поддерживает: `./start.sh stop`, `./start.sh status`, `./start.sh import`
 
-**Why:** n8n запускается вручную, brew-сервисы стартуют автоматически.
+> Скрипта автозапуска (`start.sh`) больше нет — он удалён. Workflow подгружаются
+> в n8n вручную через интерфейс (Import from File). Credential PostgreSQL для текущей
+> архитектуры не нужен (сроки считаются в JS).
 
-**How to apply:** В начале каждой сессии проверять через `./start.sh status`. Если n8n не запущен — `./start.sh start`.
+**How to apply:** В начале сессии проверять, запущен ли n8n (`http://localhost:5678`).
+Если нет — `n8n start`.
 
 ---
 
 ## Подключения
 
 - **Ollama:** `http://127.0.0.1:11434` (не localhost — macOS резолвит в IPv6 ::1, Ollama слушает только IPv4)
-- **PostgreSQL:** `host=localhost port=5432 dbname=hr_assistant user=olegkluev` (без пароля, зарезервирована)
 - **n8n:** `http://localhost:5678`
 - **GitHub:** https://github.com/Jojokora135791/hr-consultant
+- **PostgreSQL** (зарезервирована, не задействована): `host=localhost port=5432 dbname=hr_assistant user=olegkluev`
 
 ---
 
-## Архитектура v2 — AI Agent (текущая)
+## Архитектура v4 — два workflow (текущая)
 
-**Принцип:** один LangChain AI Agent управляет диалогом. Инструменты вызываются по необходимости.
+**Принцип:** вся система — это **два** workflow. Основной AI Agent ведёт диалог, проверяет
+сроки через саб-агента и вызывает единый конвейер генерации.
 
 ```
-00_main_agent.json (точка входа, Chat Trigger)
-    ↓
-AI Agent (qwen2.5:7b через Ollama)
-    ├── Tool: check_dates     → lib_check_dates.json (проверка сроков ТК ст.193)
-    └── Tool: get_rag_context → lib_rag_context.json (выдержки из НПА)
-    ↓ (когда фактура собрана и тип определён)
-scenarios/sc1–sc8 (генерация документов)
-    ↓
-lib_build_sz.json / lib_final_pack.json
+hr_agent.json (HR-агент, точка входа, workflowId=xvn4xaB9ZexlCVDG)
+    ↓ Чат с руководителем (Chat Trigger)
+    ↓ HR-ассистент (AI Agent, qwen2.5:7b, temp 0.3, Window Buffer 30)
+    ├── Tool: «Ресерчёр по срокам» (саб-агент, agentTool)
+    │        ├── свой Ollama Chat Model + Simple Memory (20)
+    │        └── Tool: calc_deadlines («Рассчитать сроки ст.193», toolCode/JS)
+    └── Tool: generate_documents → hr_generate.json (workflowId=VSXqMIrZYbAFUGYk)
+
+hr_generate.json — конвейер генерации (БЕЗ проверки сроков):
+    Вызов из агента → Нормализовать данные → Выбор сценария (Switch: progul_ochny | zaglushka)
+    → Vision (заглушка) → Промпт нарушений (RAG) → Ollama HTTP → Объединить нарушения
+    → Нужен акт? → Ollama HTTP (акт) → Промпт СЗ → Ollama HTTP (СЗ) → Финальный ответ
 ```
 
-**Что изменилось от v1:**
-- Нет state machine (START → CHECK_DATES → ...) — агент сам решает что спрашивать
-- Нет PostgreSQL для сессий — используется Window Buffer Memory (20 сообщений, in-memory)
-- Нет lib_session и lib_llm_call — перенесены в archive/
-- Точка входа: `00_main_agent.json` вместо `00_router.json`
+**Проверка сроков ст.193 (Шаг 4 диалога) — в агенте, не в hr_generate:**
+- Агент зовёт саб-агента «Ресерчёр по срокам», передавая строку
+  `"violationDate=ГГГГ-ММ-ДД; discoveryDate=ГГГГ-ММ-ДД"`.
+- Саб-агент НЕ считает даты сам — обязан вызвать `calc_deadlines` (Code-нода JS).
+- `calc_deadlines` возвращает JSON `{ isExpired, expiredReason, violationDeadline, discoveryDeadline }`.
+- Если срок истёк — генерация не запускается, направить к Касмыниной О. / Черепановой Т.
 
-**Импорт в n8n:**
-```bash
-./start.sh import
-```
-или вручную по порядку из SETUP.md.
+**Буферные сроки (внутренний буфер Контура, НЕ дословно ТК РФ; baseline ТК — 6 мес / 30 дн):**
+- от даты нарушения: **+5 мес. 15 дн.**
+- от даты обнаружения: **+20 дн.**
+Зашиты в JS-код `calc_deadlines`. Уточнять у Касмыниной О.
 
-**Credential после импорта:** создать в n8n → Settings → Credentials → Ollama API:
-- Base URL: `http://127.0.0.1:11434`
-- Заменить `REPLACE_ME_OLLAMA` в ноде "Ollama qwen2.5:7b"
+**Что изменилось от v3 и от предыдущей итерации v4:**
+- Папок `lib/` и `scenarios/` нет — всё в hr_agent + hr_generate.
+- Проверка сроков **переехала из hr_generate в агента** (саб-агент + calc_deadlines на JS).
+  Из hr_generate удалены ноды PostgreSQL, IF «Срок не истёк?», «Срок истёк — ответ», «Формат дат».
+- **PostgreSQL в workflow больше не используется** — сроки считаются детерминированно в JS.
+- Контент (чеклист, шаблоны акта и СЗ) вшит в Code-ноды hr_generate (`fs` в n8n не работает).
+  Файлы `knowledge/*.md` и `templates/*.md` — исходник правды, переносить в ноды вручную.
+- Внутри hr_generate Ollama зовётся через HTTP Request к `127.0.0.1:11434/api/generate`.
+
+**Credential (после импорта проверить):**
+- Ollama API (`Ollama account`, id xDjnxIMsBOmeTM6M) — Base URL `http://127.0.0.1:11434`
 
 ---
 
 ## Сценарии
 
-| Ключ | Файл | Статус |
-|------|------|--------|
-| `progul_ochny` | sc1_progul_ochny.json | 🔄 Требует доработки под v2 |
-| `progul_distant` | sc2_progul_distant.json | ⏳ Заглушка |
-| `progul_unclear` | sc3_progul_unclear.json | ⏳ Заглушка |
-| `ndo` | sc4_ndo.json | ⏳ Заглушка |
-| `etika` | sc5_etika.json | ⏳ Заглушка |
-| `opyanenie` | sc6_opyanenie.json | ⏳ Заглушка |
-| `ispytanie` | sc7_ispytanie.json | ⏳ Заглушка |
-| `ib_kt` | sc8_ib_kt.json | ⏳ Заглушка → юр.служба |
+| Ключ | Где обрабатывается | Статус |
+|------|--------------------|--------|
+| `progul_ochny` | ветка Switch «Выбор сценария» в hr_generate | ✅ MVP реализован |
+| `zaglushka` | ветка-заглушка (любой иной случай) | ✅ Fallback |
+| `progul_distant` | — | ⏳ Следующая итерация |
+| `ndo` / `opyanenie` / `ispytanie` | — | ⏳ Заглушка |
+| `ib_kt` | — | ⏳ → юр.служба |
+
+Агент присваивает `progul_ochny` только для очного прогула (сотрудник не ходит в офис),
+во всех остальных случаях — `zaglushka`.
 
 ---
 
 ## RAG-слот
 
-`lib_rag_context.json` — Switch по `rag_topic`, возвращает `context` — выдержки из НПА.
-Вызывается агентом как Tool. Сейчас захардкожен.
+Сейчас «RAG» — это Code-нода `Промпт: нарушения (RAG)` в hr_generate с захардкоженным
+контекстом чеклиста. Реальной векторной БД пока нет.
 
-Заменить: открыть lib_rag_context, добавить Qdrant-нод или HTTP Request к Контур.Норматив вместо Code-нод.
-
-Topics: `check_dates | progul | ndo | opyanenie | ispytanie | ib_kt | etika | sz_structure`
+Заменить (ROADMAP P1.2): Qdrant или pgvector + Ollama nomic-embed-text → топ-N чанков в промпт.
+Интеграция с RAG-AAS ЦИИ (Вова Поздняков) — июль 2026.
 
 ---
 
-## Следующие шаги (очерёдность)
+## Следующие шаги (см. ROADMAP.md)
 
-1. Настроить credential Ollama API в n8n, протестировать AI Agent в чате
-2. Переработать sc1 — принимать контекст от агента, генерировать акт и СЗ
-3. Получить шаблоны документов (DS-03 акт, DS-04 СЗ) от Черепановой/Касмыниной
-4. Реализовать sc2 (прогул дистант)
-5. Подключить реальный RAG (Qdrant или Контур.Норматив)
+1. P0.1 — Telegram Bot вместо встроенного чата + промежуточные сообщения
+2. P0.2 — Robustness промптов на нетиповых сценариях
+3. P1.1 — Рендер документов в .docx
+4. P1.2 — Реальный RAG (Qdrant/pgvector)
+5. P1.4 — PostgreSQL для аналитики (если решим задействовать БД)
+6. P2 — Деплой на сервер
 
 ---
 
@@ -110,12 +125,12 @@ Topics: `check_dates | progul | ndo | opyanenie | ispytanie | ib_kt | etika | sz
 
 | Вопрос | К кому | Статус |
 |--------|--------|--------|
-| API у Контур.Норматив? | Команда Норматива | Не проверено |
-| Источник НПА для RAG: Норматив / КП / Гарант | Клюев О. | Открыто |
+| Буферные сроки (5 мес 15 дн / 20 дн) — подтвердить | Касмынина О. | Уточнить |
 | Шаблон акта об отсутствии (DS-03) | Черепанова / Касмынина | Нужно получить |
 | Шаблон служебной записки (DS-04) | Черепанова / Касмынина | Нужно получить |
+| Нужна ли PostgreSQL (сейчас не задействована) | Клюев О. | Решить (аналитика?) |
+| API у Контур.Норматив? | Команда Норматива | Не проверено |
 | «Самодельный дистант» — алгоритм | Касмынина О. | Открыто |
-| Передача СЗ: текст в чате или выгрузка в файл? | Клюев О. | Открыто |
 | RAG-AAS ЦИИ интеграция с n8n | Вова Поздняков | Планируется (июль 2026) |
 
 ---
