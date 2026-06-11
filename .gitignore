@@ -12,3 +12,5 @@ Thumbs.db
 tmp/
 *.tmp
 *.log
+.claude/worktrees/
+n8n/temp/

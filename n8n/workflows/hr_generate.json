@@ -3,7 +3,7 @@
   "nodes": [
     {
       "parameters": {
-        "content": "## HR Generate — генерация документов\n\n**Вызывается из:** hr_agent как tool `generate_documents`\n\n**Вход (через toolWorkflow → $json.query):**\n```json\n{\n  \"scenario\": \"progul_ochny\",\n  \"employee\": { \"name\", \"position\", \"department\" },\n  \"violation\": { \"date\", \"discoveryDate\", \"absenceStart\", \"absenceEnd\", \"description\" },\n  \"respectableReason\": false,\n  \"respectableReasonComment\": \"\",\n  \"evidenceDescription\": \"...\",\n  \"contactAttempts\": \"...\",\n  \"manager\": { \"name\", \"position\" }\n}\n```\n\n**Цепочка:**\n1. normalize → check_dates (PostgreSQL) → if_expired\n2. switch_scenario → read_knowledge (или заглушка)\n3. vision_stub → RAG → merge_violations\n4. switch_need_act → [build_act?] → merge_act\n5. build_sz → final_output\n\n**Переиспользуемые шаги:** vision_stub, RAG, build_sz —\nполучают стрелки от нескольких веток Switch.\n\n**Контент из файлов (не захардкожен):**\n- knowledge/progul_checklist.md\n- knowledge/progul_tk193.md\n- templates/act_progul.md\n- templates/sz_progul.md\n",
+        "content": "## HR Generate — генерация документов\n\n**Вызывается из:** hr_agent как tool `generate_documents`\n\n**Вход (через toolWorkflow → $json.query):**\n```json\n{\n  \"scenario\": \"progul_ochny\",\n  \"employee\": { \"name\", \"position\", \"department\" },\n  \"violation\": { \"date\", \"discoveryDate\", \"absenceStart\", \"absenceEnd\", \"description\" },\n  \"respectableReason\": false,\n  \"respectableReasonComment\": \"\",\n  \"evidenceDescription\": \"...\",\n  \"contactAttempts\": \"...\",\n  \"manager\": { \"name\", \"position\" }\n}\n```\n\n**Цепочка:**\n1. normalize → switch_scenario\n2. read_knowledge (или заглушка) → vision_stub\n3. RAG → merge_violations\n4. switch_need_act → [build_act?] → merge_act\n5. build_sz → final_output\n\n⏱ **Проверка сроков вынесена в hr_agent** —\nсаб-агент «Ресерчёр по срокам» с тулом calc_deadlines.\nСюда данные приходят уже после положительного вердикта.\n\n**Переиспользуемые шаги:** vision_stub, RAG, build_sz —\nполучают стрелки от нескольких веток Switch.\n\n**Контент из файлов (не захардкожен):**\n- knowledge/progul_checklist.md\n- knowledge/progul_tk193.md\n- templates/act_progul.md\n- templates/sz_progul.md\n",
         "height": 740,
         "width": 980,
         "color": 4
@@ -57,73 +57,6 @@
       "position": [
         448,
         704
-      ]
-    },
-    {
-      "parameters": {
-        "operation": "executeQuery",
-        "query": "SELECT CASE WHEN CURRENT_DATE >= '{{ $json.violationDate }}'::date + INTERVAL '5 months 15 days' THEN true WHEN CURRENT_DATE >= '{{ $json.discoveryDate }}'::date + INTERVAL '20 days' THEN true ELSE false END AS is_expired, CASE WHEN CURRENT_DATE >= '{{ $json.violationDate }}'::date + INTERVAL '5 months 15 days' THEN 'violation_date' WHEN CURRENT_DATE >= '{{ $json.discoveryDate }}'::date + INTERVAL '20 days' THEN 'discovery_date' ELSE null END AS expired_reason, ('{{ $json.violationDate }}'::date + INTERVAL '5 months 15 days')::text AS violation_deadline, ('{{ $json.discoveryDate }}'::date + INTERVAL '20 days')::text AS discovery_deadline",
-        "options": {}
-      },
-      "id": "1a0f7454-3657-42fd-985b-0d543e773998",
-      "name": "PostgreSQL: проверить сроки",
-      "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2.5,
-      "position": [
-        672,
-        704
-      ],
-      "credentials": {
-        "postgres": {
-          "id": "3W634hxRLEp3sfjP",
-          "name": "Postgres account 4"
-        }
-      }
-    },
-    {
-      "parameters": {
-        "conditions": {
-          "options": {
-            "caseSensitive": true,
-            "leftValue": "",
-            "typeValidation": "strict",
-            "version": 2
-          },
-          "conditions": [
-            {
-              "id": "cond-expired",
-              "leftValue": "={{ $json.dates.isExpired }}",
-              "rightValue": true,
-              "operator": {
-                "type": "boolean",
-                "operation": "equal"
-              }
-            }
-          ],
-          "combinator": "and"
-        },
-        "options": {}
-      },
-      "id": "ac0819b5-464d-4615-9f58-abc021246520",
-      "name": "Срок не истёк?",
-      "type": "n8n-nodes-base.if",
-      "typeVersion": 2,
-      "position": [
-        1104,
-        704
-      ]
-    },
-    {
-      "parameters": {
-        "jsCode": "const d = $input.first().json;\nconst byViolation = d.dates?.expiredReason === 'violation_date';\nconst reason = byViolation\n  ? `Превышен срок 5 мес. 15 дней с даты нарушения (крайний срок: ${d.dates?.violationDeadline || '—'})`\n  : `Превышен срок 20 дней с даты обнаружения (крайний срок: ${d.dates?.discoveryDeadline || '—'})`;\nreturn [{ json: {\n  output: `⛔ Привлечение к дисциплинарной ответственности невозможно.\\n\\n${reason}\\n\\nОбратитесь к Касмыниной О. или Черепановой Т. для уточнения.`\n} }];"
-      },
-      "id": "2c898234-222d-434b-899d-d8b8c477b664",
-      "name": "Срок истёк — ответ",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        1344,
-        544
       ]
     },
     {
@@ -407,21 +340,6 @@
     },
     {
       "parameters": {
-        "content": "### Тут возможно первое обращение в RAG\n\nДанные: ТК РФ\nЗадача: Провека на истекшесть дела. Проверяем дату обнаружения и дату самого проступка\n",
-        "height": 212,
-        "width": 212
-      },
-      "id": "a683c66f-ada9-48e8-94c6-7f5fe1c1043a",
-      "name": "📌 HR Generate — всё в одном1",
-      "type": "n8n-nodes-base.stickyNote",
-      "typeVersion": 1,
-      "position": [
-        656,
-        1088
-      ]
-    },
-    {
-      "parameters": {
         "content": "### Выбираем сценарий, по которому пойдет процесс\n\nСейчас реализован только один сценарий - **Очный прогул**\n",
         "height": 212,
         "width": 180
@@ -433,19 +351,6 @@
       "position": [
         1280,
         1008
-      ]
-    },
-    {
-      "parameters": {
-        "jsCode": "const r = $input.first().json;\nconst prev = $('Нормализовать данные').first().json;\nreturn [{ json: {\n  context: prev.context,\n  dates: {\n    isExpired: r.is_expired === true || r.is_expired === 'true',\n    expiredReason: r.expired_reason || null,\n    violationDeadline: r.violation_deadline,\n    discoveryDeadline: r.discovery_deadline\n  }\n} }];"
-      },
-      "id": "67e48624-9a76-4ba3-9b20-0f3eff614ffe",
-      "name": "Формат дат",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        896,
-        704
       ]
     },
     {
@@ -504,70 +409,6 @@
       "position": [
         432,
         496
-      ]
-    },
-    {
-      "parameters": {
-        "content": "**PostgreSQL: проверить сроки**\nSQL по ТК ст.193. Дедлайны: 5м15д от нарушения, 20д от обнаружения (буфер Контура).",
-        "height": 170,
-        "width": 200,
-        "color": 6
-      },
-      "id": "8a2191a2-137b-4c45-b433-f10e27800fd3",
-      "name": "   ",
-      "type": "n8n-nodes-base.stickyNote",
-      "typeVersion": 1,
-      "position": [
-        656,
-        880
-      ]
-    },
-    {
-      "parameters": {
-        "content": "**Формат дат**\nПриводит результат SQL к { isExpired, expiredReason, violationDeadline, discoveryDeadline }.",
-        "height": 170,
-        "width": 184,
-        "color": 6
-      },
-      "id": "173abb5f-78c5-4e4c-b927-8ba4a47e60c9",
-      "name": "    ",
-      "type": "n8n-nodes-base.stickyNote",
-      "typeVersion": 1,
-      "position": [
-        880,
-        480
-      ]
-    },
-    {
-      "parameters": {
-        "content": "**Срок не истёк?**\nIF: isExpired=true → ветка «нельзя привлечь». false → продолжаем генерацию.",
-        "height": 186,
-        "width": 184,
-        "color": 6
-      },
-      "id": "a1d1c890-3d16-433e-a3bd-ba732ecd7617",
-      "name": "     ",
-      "type": "n8n-nodes-base.stickyNote",
-      "typeVersion": 1,
-      "position": [
-        1056,
-        848
-      ]
-    },
-    {
-      "parameters": {
-        "content": "**Срок истёк — ответ**\nФормирует сообщение с указанием какой срок истёк. Возвращает { output }.\n\nОбратиться к Касмыниной или Черепановой",
-        "height": 218,
-        "width": 248,
-        "color": 3
-      },
-      "id": "2dd303db-16f8-4a11-9b6f-cc9371585e58",
-      "name": "      ",
-      "type": "n8n-nodes-base.stickyNote",
-      "typeVersion": 1,
-      "position": [
-        1344,
-        288
       ]
     },
     {
@@ -853,35 +694,6 @@
       "main": [
         [
           {
-            "node": "PostgreSQL: проверить сроки",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "PostgreSQL: проверить сроки": {
-      "main": [
-        [
-          {
-            "node": "Формат дат",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Срок не истёк?": {
-      "main": [
-        [
-          {
-            "node": "Срок истёк — ответ",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
             "node": "Выбор сценария",
             "type": "main",
             "index": 0
@@ -1018,17 +830,6 @@
         [
           {
             "node": "Финальный ответ",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Формат дат": {
-      "main": [
-        [
-          {
-            "node": "Срок не истёк?",
             "type": "main",
             "index": 0
           }
