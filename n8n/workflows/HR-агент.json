@@ -1,0 +1,224 @@
+{
+  "name": "HR-агент",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## HR-агент v4\n\n**Точка входа.** Агент ведёт диалог с руководителем, собирает данные, проверяет сроки и вызывает генерацию.\n\n**Инструменты:**\n- «Ресерчёр по срокам» (саб-агент) → тул calc_deadlines: проверка сроков ст.193 ДО генерации\n- generate_documents → hr_generate: акт + служебная записка\n\n**Проверка сроков теперь здесь, в агенте (Шаг 4)** — не в hr_generate.",
+        "height": 508,
+        "width": 812,
+        "color": 4
+      },
+      "id": "e6bb6f8c-e22f-40b8-9f49-106005097338",
+      "name": "📌 HR-агент — точка входа",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        176,
+        -16
+      ]
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "b3109dfc-64d7-41f8-93d9-4474b3910388",
+      "name": "Чат с руководителем",
+      "type": "@n8n/n8n-nodes-langchain.chatTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        224,
+        528
+      ],
+      "webhookId": "hr-agent-chat-v4"
+    },
+    {
+      "parameters": {
+        "contextWindowLength": 30
+      },
+      "id": "b2e5789f-f84f-4a53-a2e1-29f3ddd4d8ce",
+      "name": "Память диалога",
+      "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
+      "typeVersion": 1.3,
+      "position": [
+        416,
+        736
+      ]
+    },
+    {
+      "parameters": {
+        "name": "generate_documents",
+        "description": "Проверяет сроки привлечения к ответственности по ТК РФ ст.193 и генерирует пакет документов (акт об отсутствии + служебную записку). Вызывай ТОЛЬКО после того как руководитель подтвердил корректность всех данных.",
+        "workflowId": {
+          "__rl": true,
+          "value": "VSXqMIrZYbAFUGYk",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/VSXqMIrZYbAFUGYk",
+          "cachedResultName": "HR Generate — генерация документов"
+        },
+        "fields": {
+          "values": [
+            {
+              "name": "scenario"
+            },
+            {
+              "name": "employee",
+              "type": "numberValue"
+            },
+            {
+              "name": "violation"
+            },
+            {
+              "name": "respectableReason"
+            },
+            {
+              "name": "respectableReasonComment"
+            },
+            {
+              "name": "evidenceDescription"
+            },
+            {
+              "name": "contactAttempts"
+            },
+            {
+              "name": "manager"
+            }
+          ]
+        }
+      },
+      "id": "722144c6-82dc-41cc-859c-57bce65b5a93",
+      "name": "Генерация документов",
+      "type": "@n8n/n8n-nodes-langchain.toolWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        560,
+        736
+      ]
+    },
+    {
+      "parameters": {
+        "options": {
+          "systemMessage": "Ты — HR-ассистент для руководителей компании Контур. Помогаешь оформить дисциплинарные документы: акт об отсутствии и служебную записку.\n\n\n\n## Твоя роль\n- Задаёшь вопросы и собираешь факты — не додумываешь ничего сам. Либо додумываешь, но совсем немного, например помогаешь доофорить просто дату в нужный формат\n- Работаешь строго в рамках предоставленных данных\n- Граница: до передачи документов кадровому эксперту включительно\n- Если ситуация нестандартная — направляй к Касмыниной О. или Черепановой Т.\n\n## Алгоритм работы\n\n### Шаг 1. Приветствие и выяснение ситуации\nПоздоровайся и попроси описать ситуацию.\n\n### Шаг 2. Сбор данных о нарушении\nПоследовательно уточни (по одному вопросу за раз):\n1. ФИО сотрудника, должность, подразделение\n2. Дата отсутствия (формат ГГГГ-ММ-ДД)\n3. Когда обнаружено отсутствие (дата обнаружения, формат ГГГГ-ММ-ДД)\n4. Время отсутствия (с ... по ...)\n5. Удалось ли связаться с сотрудником? Что выяснилось?\n6. Есть ли уважительная причина?\n7. Есть ли доказательства (скрины СКУД, переписка и т.д.)?\n8. ФИО и должность руководителя (если не очевидно)\n\n### Шаг 3. Суммаризация\nПерескажи собранные данные и спроси: «Всё верно? Готов сформировать документы?»\nЕсли есть правки — внеси и повтори.\n\n### Шаг 4. Проверка по срокам (обязательно до генерации)\nПрежде чем генерировать документы, проверь, не истёк ли срок привлечения к ответственности.\nВызови инструмент calc_deadlines, передав даты строкой строго в формате:\n\"violationDate=ГГГГ-ММ-ДД; discoveryDate=ГГГГ-ММ-ДД\"\n(violationDate — дата нарушения, discoveryDate — дата обнаружения).\nИнструмент вернёт JSON с полями: isExpired, expiredReason, violationDeadline, discoveryDeadline.\nНИКОГДА не считай сроки сам — доверяй только числам из инструмента.\nДальше действуй по полю isExpired:\n- isExpired = false → сообщи руководителю: «✅ Срок не истёк, можно привлекать. Крайние сроки: по нарушению — {violationDeadline}, по обнаружению — {discoveryDeadline}» и переходи к Шагу 5.\n- isExpired = true → НЕ запускай генерацию. Сообщи, что срок истёк (буфер Контура: 5 мес. 15 дн. от нарушения, 20 дн. от обнаружения), и заверши кейс, порекомендовав обратиться к Касмыниной О. или Черепановой Т.\n\n### Шаг 5. Генерация документов\nПосле подтверждения вызови инструмент `generate_documents`, передав JSON:\nВажно!\n\nв scenario передавай \"progul_ochny\" Если ты зафиксировал прогул, и именно очный прогул. Т.е. человек не ходит в офис. Во всех остальных случаях присваивай - \"zaglushka\"\n```\n{\n  \"scenario\": \".....\",\n  \"employee\": { \"name\": \"...\", \"position\": \"...\", \"department\": \"...\" },\n  \"violation\": { \"date\": \"ГГГГ-ММ-ДД\", \"discoveryDate\": \"ГГГГ-ММ-ДД\", \"absenceStart\": \"ЧЧ:ММ\", \"absenceEnd\": \"ЧЧ:ММ\", \"description\": \"...\" },\n  \"respectableReason\": false,\n  \"respectableReasonComment\": \"\",\n  \"evidenceDescription\": \"...\",\n  \"contactAttempts\": \"...\",\n  \"manager\": { \"name\": \"...\", \"position\": \"...\" }\n}\n```\n\n### Шаг 6. Передача результата\nПокажи сгенерированные документы. Напомни: передать пакет Черепановой Т. или Касмыниной О.\n\n## Важные правила\n- Никогда не цитируй статьи ТК РФ по памяти — только то, что вернул инструмент\n- Не предлагай меры, выходящие за рамки чеклиста\n- Один вопрос за раз — не задавай несколько вопросов в одном сообщении\n- Если чего-то не знаешь — скажи прямо и уточни"
+        }
+      },
+      "id": "8f16f8c2-1ab9-49be-80be-6037eb548ca2",
+      "name": "HR-ассистент",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.7,
+      "position": [
+        512,
+        528
+      ]
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "claude-opus-4-8",
+          "mode": "list",
+          "cachedResultName": "Claude Opus 4.8"
+        },
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatAnthropic",
+      "typeVersion": 1.3,
+      "position": [
+        288,
+        736
+      ],
+      "id": "10151cca-e6ed-4bfa-8150-0ab2c97aa829",
+      "name": "Anthropic Chat Model",
+      "credentials": {
+        "anthropicApi": {
+          "id": "5kFSALXbGSs7RnI8",
+          "name": "Anthropic account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "name": "calc_deadlines",
+        "description": "Рассчитывает крайние сроки привлечения к дисциплинарной ответственности и определяет, истёк ли срок. Вход — строка с датами в формате ГГГГ-ММ-ДД (сначала дата нарушения, затем дата обнаружения). Возвращает JSON: isExpired, expiredReason, violationDeadline, discoveryDeadline.",
+        "jsCode": "// query — строка от агента, напр.: \"violationDate=2026-01-15; discoveryDate=2026-01-20\"\n// Сроки — внутренний буфер Контура (НЕ дословно ТК РФ):\n//   нарушение: +5 мес 15 дн;  обнаружение: +20 дн.\n// ТК РФ baseline: 6 мес / 30 дн. Уточнять у Касмыниной О.\nconst text = String(query || '');\nconst dates = text.match(/\\d{4}-\\d{2}-\\d{2}/g) || [];\nconst violationStr = dates[0];\nconst discoveryStr = dates[1] || dates[0];\nif (!violationStr) {\n  return JSON.stringify({ error: 'Не нашёл дат в формате ГГГГ-ММ-ДД', received: text });\n}\nconst now = new Date();\nconst violationDate = new Date(violationStr);\nconst discoveryDate = new Date(discoveryStr);\nconst vDeadline = new Date(violationDate);\nvDeadline.setMonth(vDeadline.getMonth() + 5);\nvDeadline.setDate(vDeadline.getDate() + 15);\nconst dDeadline = new Date(discoveryDate);\ndDeadline.setDate(dDeadline.getDate() + 20);\nconst expiredByViolation = now >= vDeadline;\nconst expiredByDiscovery = now >= dDeadline;\nconst fmt = (d) => d.toISOString().split('T')[0];\nreturn JSON.stringify({\n  isExpired: expiredByViolation || expiredByDiscovery,\n  expiredReason: expiredByViolation ? 'violation_date' : (expiredByDiscovery ? 'discovery_date' : null),\n  violationDeadline: fmt(vDeadline),\n  discoveryDeadline: fmt(dDeadline),\n  today: fmt(now)\n});\n"
+      },
+      "type": "@n8n/n8n-nodes-langchain.toolCode",
+      "typeVersion": 1,
+      "position": [
+        736,
+        736
+      ],
+      "id": "bbef58aa-3b9c-4c42-a996-a1fdba7eff87",
+      "name": "Рассчитать сроки ст."
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Чат с руководителем": {
+      "main": [
+        [
+          {
+            "node": "HR-ассистент",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Память диалога": {
+      "ai_memory": [
+        [
+          {
+            "node": "HR-ассистент",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Генерация документов": {
+      "ai_tool": [
+        [
+          {
+            "node": "HR-ассистент",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Anthropic Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "HR-ассистент",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Рассчитать сроки ст.": {
+      "ai_tool": [
+        [
+          {
+            "node": "HR-ассистент",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "a4903d18-d7b1-4d85-8171-0d8d057084de",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "9a987c8c5e53be071f8410e33526cc5ade2a52fb0a040cf9a29e79d0943782f4"
+  },
+  "id": "xvn4xaB9ZexlCVDG",
+  "tags": []
+}

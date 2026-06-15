@@ -3,7 +3,7 @@
   "nodes": [
     {
       "parameters": {
-        "content": "## HR Generate — генерация документов\n\n**Вызывается из:** hr_agent как tool `generate_documents`\n\n**Вход (через toolWorkflow → $json.query):**\n```json\n{\n  \"scenario\": \"progul_ochny\",\n  \"employee\": { \"name\", \"position\", \"department\" },\n  \"violation\": { \"date\", \"discoveryDate\", \"absenceStart\", \"absenceEnd\", \"description\" },\n  \"respectableReason\": false,\n  \"respectableReasonComment\": \"\",\n  \"evidenceDescription\": \"...\",\n  \"contactAttempts\": \"...\",\n  \"manager\": { \"name\", \"position\" }\n}\n```\n\n**Цепочка:**\n1. normalize → switch_scenario\n2. read_knowledge (или заглушка) → vision_stub\n3. RAG → merge_violations\n4. switch_need_act → [build_act?] → merge_act\n5. build_sz → final_output\n\n⏱ **Проверка сроков вынесена в hr_agent** —\nсаб-агент «Ресерчёр по срокам» с тулом calc_deadlines.\nСюда данные приходят уже после положительного вердикта.\n\n**Переиспользуемые шаги:** vision_stub, RAG, build_sz —\nполучают стрелки от нескольких веток Switch.\n\n**Контент из файлов (не захардкожен):**\n- knowledge/progul_checklist.md\n- knowledge/progul_tk193.md\n- templates/act_progul.md\n- templates/sz_progul.md\n",
+        "content": "## HR Generate — генерация документов\n\n**Вызывается из:** hr_agent как tool `generate_documents`\n\n**Вход (через toolWorkflow → $json.query):**\n```json\n{\n  \"scenario\": \"progul_ochny\",\n  \"employee\": { \"name\", \"position\", \"department\" },\n  \"violation\": { \"date\", \"discoveryDate\", \"absenceStart\", \"absenceEnd\", \"description\" },\n  \"respectableReason\": false,\n  \"respectableReasonComment\": \"\",\n  \"evidenceDescription\": \"...\",\n  \"contactAttempts\": \"...\",\n  \"manager\": { \"name\", \"position\" }\n}\n```\n\n**Цепочка:**\n1. normalize → check_dates (PostgreSQL) → if_expired\n2. switch_scenario → read_knowledge (или заглушка)\n3. vision_stub → RAG → merge_violations\n4. switch_need_act → [build_act?] → merge_act\n5. build_sz → final_output\n\n**Переиспользуемые шаги:** vision_stub, RAG, build_sz —\nполучают стрелки от нескольких веток Switch.\n\n**Контент из файлов (не захардкожен):**\n- knowledge/progul_checklist.md\n- knowledge/progul_tk193.md\n- templates/act_progul.md\n- templates/sz_progul.md\n",
         "height": 740,
         "width": 980,
         "color": 4
@@ -48,19 +48,6 @@
     },
     {
       "parameters": {
-        "jsCode": "const raw = $input.first().json;\nlet data = raw;\nif (raw.query && typeof raw.query === 'object' && !Array.isArray(raw.query)) {\n  data = raw.query;\n} else if (typeof raw.input === 'string') {\n  try { data = JSON.parse(raw.input); } catch(e) {}\n} else if (typeof raw.query === 'string') {\n  try { data = JSON.parse(raw.query); } catch(e) {}\n}\nif (!data.employee) throw new Error('hr_generate: не переданы данные employee. Получено: ' + JSON.stringify(raw));\nif (!data.violation) throw new Error('hr_generate: не переданы данные violation.');\ndata.scenario = data.scenario || 'progul_ochny';\nreturn [{ json: {\n  context: data,\n  violationDate: data.violation.date,\n  discoveryDate: data.violation.discoveryDate\n} }];"
-      },
-      "id": "92957be7-f65a-4976-b638-cfa3a4cdf14c",
-      "name": "Нормализовать данные",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        448,
-        704
-      ]
-    },
-    {
-      "parameters": {
         "rules": {
           "values": [
             {
@@ -98,8 +85,8 @@
       "type": "n8n-nodes-base.switch",
       "typeVersion": 3,
       "position": [
-        1328,
-        848
+        1104,
+        784
       ]
     },
     {
@@ -111,8 +98,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1568,
-        992
+        1344,
+        928
       ]
     },
     {
@@ -124,8 +111,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1792,
-        848
+        1568,
+        784
       ]
     },
     {
@@ -137,8 +124,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1984,
-        848
+        1760,
+        784
       ]
     },
     {
@@ -171,8 +158,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        2208,
-        848
+        1984,
+        784
       ]
     },
     {
@@ -184,8 +171,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        2432,
-        848
+        2208,
+        784
       ]
     },
     {
@@ -227,8 +214,8 @@
       "type": "n8n-nodes-base.switch",
       "typeVersion": 3,
       "position": [
-        2640,
-        848
+        2416,
+        784
       ]
     },
     {
@@ -261,8 +248,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        3104,
-        704
+        2880,
+        640
       ]
     },
     {
@@ -274,8 +261,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        2864,
-        944
+        2640,
+        880
       ]
     },
     {
@@ -287,8 +274,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        3312,
-        848
+        3088,
+        784
       ]
     },
     {
@@ -321,8 +308,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        3744,
-        848
+        3520,
+        784
       ]
     },
     {
@@ -334,8 +321,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        3968,
-        848
+        3744,
+        784
       ]
     },
     {
@@ -349,8 +336,8 @@
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "position": [
-        1280,
-        1008
+        1056,
+        944
       ]
     },
     {
@@ -362,8 +349,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1568,
-        752
+        1344,
+        688
       ]
     },
     {
@@ -375,8 +362,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        2864,
-        720
+        2640,
+        656
       ]
     },
     {
@@ -397,22 +384,6 @@
     },
     {
       "parameters": {
-        "content": "**Нормализовать данные**\nРаспаковывает $json.query (от toolWorkflow). Проверяет наличие employee и violation.",
-        "height": 154,
-        "width": 200,
-        "color": 6
-      },
-      "id": "5ba450c3-b88d-46c1-b98a-43cd7394974b",
-      "name": "  ",
-      "type": "n8n-nodes-base.stickyNote",
-      "typeVersion": 1,
-      "position": [
-        432,
-        496
-      ]
-    },
-    {
-      "parameters": {
         "content": "**Прочитать данные прогула**\nЧеклист + ТК ст.193 вшиты в код. Добавляет needAct=true и checklist_content, tk_content.",
         "height": 180,
         "width": 184,
@@ -423,8 +394,8 @@
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "position": [
-        1568,
-        560
+        1344,
+        496
       ]
     },
     {
@@ -439,8 +410,8 @@
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "position": [
-        1568,
-        1136
+        1344,
+        1072
       ]
     },
     {
@@ -455,8 +426,8 @@
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "position": [
-        1792,
-        688
+        1568,
+        624
       ]
     },
     {
@@ -471,8 +442,8 @@
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "position": [
-        1984,
-        1024
+        1760,
+        960
       ]
     },
     {
@@ -487,8 +458,8 @@
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "position": [
-        2208,
-        640
+        1984,
+        576
       ]
     },
     {
@@ -503,8 +474,8 @@
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "position": [
-        2416,
-        1008
+        2192,
+        944
       ]
     },
     {
@@ -519,8 +490,8 @@
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "position": [
-        2576,
-        656
+        2352,
+        592
       ]
     },
     {
@@ -535,8 +506,8 @@
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "position": [
-        2864,
-        576
+        2640,
+        512
       ]
     },
     {
@@ -551,8 +522,8 @@
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "position": [
-        3104,
-        576
+        2880,
+        512
       ]
     },
     {
@@ -567,8 +538,8 @@
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "position": [
-        2848,
-        1104
+        2624,
+        1040
       ]
     },
     {
@@ -583,8 +554,8 @@
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "position": [
-        3312,
-        976
+        3088,
+        912
       ]
     },
     {
@@ -599,8 +570,8 @@
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "position": [
-        3520,
-        656
+        3296,
+        592
       ]
     },
     {
@@ -615,8 +586,8 @@
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "position": [
-        3728,
-        1008
+        3504,
+        944
       ]
     },
     {
@@ -631,8 +602,8 @@
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "position": [
-        3968,
-        672
+        3744,
+        608
       ]
     },
     {
@@ -644,8 +615,37 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        3520,
-        816
+        3296,
+        752
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $input.first().json;\nlet data = raw;\nif (raw.query && typeof raw.query === 'object' && !Array.isArray(raw.query)) {\n  data = raw.query;\n} else if (typeof raw.input === 'string') {\n  try { data = JSON.parse(raw.input); } catch(e) {}\n} else if (typeof raw.query === 'string') {\n  try { data = JSON.parse(raw.query); } catch(e) {}\n}\nif (!data.employee) throw new Error('hr_generate: не переданы данные employee. Получено: ' + JSON.stringify(raw));\nif (!data.violation) throw new Error('hr_generate: не переданы данные violation.');\ndata.scenario = data.scenario || 'progul_ochny';\nreturn [{ json: {\n  context: data,\n  violationDate: data.violation.date,\n  discoveryDate: data.violation.discoveryDate\n} }];"
+      },
+      "id": "975b2ea6-b438-40b3-be62-8b822f9e45a3",
+      "name": "Нормализовать данные1",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        832,
+        752
+      ]
+    },
+    {
+      "parameters": {
+        "content": "**Нормализовать данные**\nРаспаковывает $json.query (от toolWorkflow). Проверяет наличие employee и violation.",
+        "height": 154,
+        "width": 200,
+        "color": 6
+      },
+      "id": "5ba450c3-b88d-46c1-b98a-43cd7394974b",
+      "name": "  ",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        432,
+        496
       ]
     }
   ],
@@ -683,18 +683,7 @@
       "main": [
         [
           {
-            "node": "Нормализовать данные",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Нормализовать данные": {
-      "main": [
-        [
-          {
-            "node": "Выбор сценария",
+            "node": "Нормализовать данные1",
             "type": "main",
             "index": 0
           }
@@ -868,6 +857,17 @@
           }
         ]
       ]
+    },
+    "Нормализовать данные1": {
+      "main": [
+        [
+          {
+            "node": "Выбор сценария",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
   "active": true,
@@ -876,7 +876,7 @@
     "binaryMode": "separate",
     "availableInMCP": false
   },
-  "versionId": "a8a0b743-ad39-48fd-b0fe-cbfe578b52f0",
+  "versionId": "564fb7a1-e0bf-4325-a77b-284716992443",
   "meta": {
     "templateCredsSetupCompleted": true,
     "instanceId": "9a987c8c5e53be071f8410e33526cc5ade2a52fb0a040cf9a29e79d0943782f4"

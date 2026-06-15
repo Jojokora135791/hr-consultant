@@ -1,6 +1,6 @@
 ---
 name: project-architecture
-description: "Архитектура n8n workflow v4 (hr_agent + hr_generate), проверка сроков в агенте через calc_deadlines, инфраструктура, открытые вопросы"
+description: "Архитектура n8n workflow v5 (HR-агент на Claude Opus 4.8 + Генерация на Ollama), calc_deadlines прямой тул, саб-агент убран, гибрид облако/локаль"
 metadata:
   type: project
 ---
@@ -39,32 +39,49 @@ n8n start                           # http://localhost:5678
 
 ---
 
-## Архитектура v4 — два workflow (текущая)
+## Архитектура v5 — два workflow (текущая, гибрид облако/локаль)
 
-**Принцип:** вся система — это **два** workflow. Основной AI Agent ведёт диалог, проверяет
-сроки через саб-агента и вызывает единый конвейер генерации.
+**Принцип:** вся система — это **два** workflow. Диалоговый AI Agent работает на **Claude (облако)**,
+конвейер генерации — на **Ollama (локально)**. Проверка сроков — прямой Code-тул на агенте.
+
+> ⚠️ Итоговые файлы в `n8n/workflows/` теперь названы по-русски: **`HR-агент.json`** и
+> **`Генерация документов.json`** (выгрузка из n8n). Старые `hr_agent.json` / `hr_generate.json` —
+> устаревшие, не путать.
 
 ```
-hr_agent.json (HR-агент, точка входа, workflowId=xvn4xaB9ZexlCVDG)
+HR-агент.json (точка входа)
     ↓ Чат с руководителем (Chat Trigger)
-    ↓ HR-ассистент (AI Agent, qwen2.5:7b, temp 0.3, Window Buffer 30)
-    ├── Tool: «Ресерчёр по срокам» (саб-агент, agentTool)
-    │        ├── свой Ollama Chat Model + Simple Memory (20)
-    │        └── Tool: calc_deadlines («Рассчитать сроки ст.193», toolCode/JS)
-    └── Tool: generate_documents → hr_generate.json (workflowId=VSXqMIrZYbAFUGYk)
+    ↓ HR-ассистент (AI Agent, Claude Opus 4.8 через Anthropic Chat Model, Window Buffer 30)
+    ├── Tool: calc_deadlines («Рассчитать сроки ст.», toolCode/JS) — ПРЯМОЙ тул на агенте
+    └── Tool: generate_documents → Генерация документов.json (toolWorkflow)
 
-hr_generate.json — конвейер генерации (БЕЗ проверки сроков):
+Генерация документов.json — конвейер генерации (БЕЗ проверки сроков, на Ollama):
     Вызов из агента → Нормализовать данные → Выбор сценария (Switch: progul_ochny | zaglushka)
     → Vision (заглушка) → Промпт нарушений (RAG) → Ollama HTTP → Объединить нарушения
     → Нужен акт? → Ollama HTTP (акт) → Промпт СЗ → Ollama HTTP (СЗ) → Финальный ответ
 ```
 
-**Проверка сроков ст.193 (Шаг 4 диалога) — в агенте, не в hr_generate:**
-- Агент зовёт саб-агента «Ресерчёр по срокам», передавая строку
-  `"violationDate=ГГГГ-ММ-ДД; discoveryDate=ГГГГ-ММ-ДД"`.
-- Саб-агент НЕ считает даты сам — обязан вызвать `calc_deadlines` (Code-нода JS).
+**Модели:**
+- Диалоговый агент: **Claude Opus 4.8** (`anthropicApi`, Base URL `https://api.anthropic.com`). Облако, платно.
+- Генерация документов: **Ollama qwen2.5:7b** локально (3× HTTP к `127.0.0.1:11434/api/generate`).
+
+**Проверка сроков ст.193 (Шаг 4 диалога) — в агенте, через прямой Code-тул:**
+- Агент сам вызывает `calc_deadlines`, передавая строку `"violationDate=ГГГГ-ММ-ДД; discoveryDate=ГГГГ-ММ-ДД"`.
 - `calc_deadlines` возвращает JSON `{ isExpired, expiredReason, violationDeadline, discoveryDeadline }`.
+- Агент НЕ считает даты сам — доверяет только числам из тула.
 - Если срок истёк — генерация не запускается, направить к Касмыниной О. / Черепановой Т.
+
+**Почему убран саб-агент «Ресерчёр по срокам»** (был в v4): вложенный AI Agent (тип `agentTool`)
+внутри основного агента в n8n даёт ошибку **«The Tool attempted to return an engine request,
+which is not supported in Agents»** — n8n не умеет возвращать результат вложенного агента в родителя.
+На qwen баг не всплывал (модель не дёргала тул корректно); Claude вызвал тул правильно — и обнажил
+проблему. Решение: убрать саб-агента + его Ollama Chat Model + Simple Memory, повесить `calc_deadlines`
+прямым тулом. Заодно минус лишний LLM-слой. См. [[n8n-nested-agent-engine-request]].
+
+> 🔒 **Приватность (статус — НЕ паниковать):** Claude в диалоге сейчас используется **для отладки** —
+> снять риск «модель глупая» (qwen2.5:7b путалась). Олег **НЕ гоняет продовые/реальные ПД** через облако.
+> Вопрос «облако vs локаль для прода» (152-ФЗ, трансграничная передача ФИО сотрудников) — отложен,
+> решение примут позже. Не предлагать паническую миграцию обратно; для прода — отдельное решение Олега.
 
 **Буферные сроки (внутренний буфер Контура, НЕ дословно ТК РФ; baseline ТК — 6 мес / 30 дн):**
 - от даты нарушения: **+5 мес. 15 дн.**
