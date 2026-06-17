@@ -3,38 +3,6 @@
   "nodes": [
     {
       "parameters": {
-        "content": "## HR Generate — генерация документов\n\n**Вызывается из:** hr_agent как tool `generate_documents`\n\n**Вход (через toolWorkflow → $json.query):**\n```json\n{\n  \"scenario\": \"progul_ochny\",\n  \"employee\": { \"name\", \"position\", \"department\" },\n  \"violation\": { \"date\", \"discoveryDate\", \"absenceStart\", \"absenceEnd\", \"description\" },\n  \"respectableReason\": false,\n  \"respectableReasonComment\": \"\",\n  \"evidenceDescription\": \"...\",\n  \"contactAttempts\": \"...\",\n  \"manager\": { \"name\", \"position\" }\n}\n```\n\n**Цепочка:**\n1. normalize → check_dates (PostgreSQL) → if_expired\n2. switch_scenario → read_knowledge (или заглушка)\n3. vision_stub → RAG → merge_violations\n4. switch_need_act → [build_act?] → merge_act\n5. build_sz → final_output\n\n**Переиспользуемые шаги:** vision_stub, RAG, build_sz —\nполучают стрелки от нескольких веток Switch.\n\n**Контент из файлов (не захардкожен):**\n- knowledge/progul_checklist.md\n- knowledge/progul_tk193.md\n- templates/act_progul.md\n- templates/sz_progul.md\n",
-        "height": 740,
-        "width": 980,
-        "color": 4
-      },
-      "id": "5e77fc74-f477-4026-9e47-35eac0bb6a1d",
-      "name": "📌 HR Generate — всё в одном",
-      "type": "n8n-nodes-base.stickyNote",
-      "typeVersion": 1,
-      "position": [
-        -960,
-        368
-      ]
-    },
-    {
-      "parameters": {
-        "content": "## Добавить новый сценарий\n\n1. Создать `knowledge/{scenario}_checklist.md`\n2. Добавить ветку в «Выбор сценария» (Switch)\n3. Добавить нод «Прочитать данные {scenario}»\n4. Подключить к «Vision: анализ доказательств»\n5. Если нужен акт — добавить ветку в «Нужен акт?»\n\nRAG, Vision, build_sz — переиспользуются автоматически.",
-        "height": 220,
-        "width": 360,
-        "color": 7
-      },
-      "id": "6055bbfd-e20d-4a81-8a53-a4634db6541d",
-      "name": "📌 Добавить новый сценарий",
-      "type": "n8n-nodes-base.stickyNote",
-      "typeVersion": 1,
-      "position": [
-        -352,
-        720
-      ]
-    },
-    {
-      "parameters": {
         "inputSource": "passthrough"
       },
       "id": "336bbfa6-8d0e-4d47-90c6-66f481880d0d",
@@ -42,8 +10,411 @@
       "type": "n8n-nodes-base.executeWorkflowTrigger",
       "typeVersion": 1.1,
       "position": [
-        224,
-        704
+        2576,
+        2432
+      ]
+    },
+    {
+      "parameters": {
+        "content": "**Вызов из агента**\nТочка входа. Принимает данные от hr_agent через toolWorkflow. Всё приходит в $json.",
+        "height": 154,
+        "width": 200,
+        "color": 6
+      },
+      "id": "169a84a5-564c-41a4-8941-433da675f929",
+      "name": " 1",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        2480,
+        2592
+      ]
+    },
+    {
+      "parameters": {
+        "content": "**Вызов из агента**\nТочка входа. Принимает данные от hr_agent через toolWorkflow. Всё приходит в $json.",
+        "height": 154,
+        "width": 200,
+        "color": 6
+      },
+      "id": "6ba4d1e2-8d1f-4733-842f-9c4902b94924",
+      "name": " ",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        7552,
+        2432
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const inp = $input.first().json;\nconst ctx = inp.context || {};\nconst emp = ctx.employee || {}, vio = ctx.violation || {}, mgr = ctx.manager || {};\nconst U = '[УТОЧНИТЬ]';\nfunction ru(d){ const m = String(d||'').match(/^(\\d{4})-(\\d{2})-(\\d{2})$/); return m ? `${m[3]}.${m[2]}.${m[1]}` : (d || U); }\nconst scenario = ctx.scenario || 'progul_ochny';\n// какие документы нужны для сценария (расширяемо под новые проекты)\nconst DOC_MAP = {\n  progul_ochny: { нужен_акт: true,  нужна_сз: true },\n  zaglushka:    { нужен_акт: false, нужна_сз: true },\n};\nconst docs = DOC_MAP[scenario] || { нужен_акт: true, нужна_сз: true };\nconst t = new Date();\nconst dd = String(t.getDate()).padStart(2,'0'), mm = String(t.getMonth()+1).padStart(2,'0'), yyyy = t.getFullYear();\nreturn [{ json: {\n  нужен_акт: docs.нужен_акт,\n  нужна_сз: docs.нужна_сз,\n  акт_file_id: '1pz4mHqz6dleQKZvit3VRfXs_h95VWqKl',\n  сз_file_id: '1iiqEDumDy61qRr9lv0kFGpkUB3hTpkWd',\n  chat_id: inp.chat_id,\n  организация: 'ООО «ТК Контур»',\n  город: U, адрес: U, время_составления: U,\n  дата_составления: `${dd}.${mm}.${yyyy}`,\n  год: String(yyyy),\n  дата_отсутствия: ru(vio.date),\n  время_начала: vio.absenceStart || U,\n  время_окончания: vio.absenceEnd || U,\n  подразделение: emp.department || U,\n  должность_работника: emp.position || U,\n  фио_работника: emp.name || U,\n  должность_составителя: mgr.position || U,\n  фио_составителя: mgr.name || U,\n  свидетель_1_фио: U, свидетель_1_должность: U,\n  свидетель_2_фио: U, свидетель_2_должность: U,\n  должность_руководителя_организации: U, фио_руководителя_организации: U,\n  должность_автора: mgr.position || U,\n  подразделение_автора: emp.department || U,\n  фио_автора: mgr.name || U,\n} }];"
+      },
+      "id": "237ffd60-5361-4e2e-8c37-553ca4dcdf4b",
+      "name": "Значения документов",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4640,
+        2464
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://127.0.0.1:11434/api/generate",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "model",
+              "value": "qwen2.5:7b"
+            },
+            {
+              "name": "prompt",
+              "value": "=Верни СТРОГО валидный JSON и больше ничего. Три поля:\\n\"фио_работника_род\": ФИО работника в дательном падеже (кому?).\\n\"обстоятельства\": один связный абзац об обстоятельствах отсутствия (попытки связи, что сообщил сотрудник, причина).\\n\"приложения\": нумерованный список доказательств в формате '1. ... на N л.'; если нет — \"Отсутствуют\".\\nДанные:\\nФИО работника: {{ $('Нормализовать данные').item.json.context.employee.name }}\\nПопытки связи: {{ $('Нормализовать данные').item.json.context.contactAttempts }}\\nУважительная причина: {{ $('Нормализовать данные').item.json.context.respectableReason ? $('Нормализовать данные').item.json.context.respectableReasonComment : 'не установлена' }}\\nДоказательства: {{ $('Нормализовать данные').item.json.context.evidenceDescription }}"
+            },
+            {
+              "name": "stream",
+              "value": false
+            },
+            {
+              "name": "format",
+              "value": "json"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "7b0ffc2b-2594-4ba2-8c6d-7c4c730ede81",
+      "name": "Ollama: умные значения",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        4864,
+        2464
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const base = $('Значения документов').first().json;\nlet smart = {};\ntry {\n  const resp = $input.first().json.response || '{}';\n  const m = resp.match(/\\{[\\s\\S]*\\}/);\n  smart = JSON.parse(m ? m[0] : resp);\n} catch (e) { smart = {}; }\nreturn [{ json: {\n  ...base,\n  фио_работника_род: smart['фио_работника_род'] || base['фио_работника'],\n  обстоятельства: smart['обстоятельства'] || '[УТОЧНИТЬ]',\n  приложения: smart['приложения'] || 'Отсутствуют',\n} }];\n"
+      },
+      "id": "b8b05c7e-dd59-46a5-89c8-3d1251ba9462",
+      "name": "Объединить значения",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        5088,
+        2464
+      ]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Объединить значения').item.json.chat_id }}",
+        "text": "⏳ Формирую документы (акт и служебную записку)…",
+        "additionalFields": {}
+      },
+      "id": "7fe12205-a555-4f68-8e96-b84b7bff8d93",
+      "name": "Статус: готовлю документы",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        5312,
+        2464
+      ],
+      "webhookId": "p11-Статус: готовлю документы",
+      "retryOnFail": true,
+      "maxTries": 4,
+      "waitBetweenTries": 1500,
+      "credentials": {
+        "telegramApi": {
+          "id": "aESJLABaZl21D7lx",
+          "name": "hr_assistant_kontur_bot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "authentication": "serviceAccount",
+        "operation": "download",
+        "fileId": {
+          "__rl": true,
+          "value": "={{ $('Объединить значения').item.json.акт_file_id }}",
+          "mode": "id"
+        },
+        "options": {
+          "binaryPropertyName": "data",
+          "googleFileConversion": {
+            "conversion": {
+              "docsToFormat": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            }
+          },
+          "fileName": "Акт_об_отсутствии.docx"
+        }
+      },
+      "id": "a9d88f1e-cf42-4121-a135-e70256d1aaff",
+      "name": "Drive: скачать акт",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        5616,
+        2480
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1500,
+      "credentials": {
+        "googleApi": {
+          "id": "Mpwx0ehoX4NPqXcv",
+          "name": "N8N-kontur"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const AdmZip = require('adm-zip');\nconst v = $('Объединить значения').first().json;\nconst SKIP = new Set(['chat_id']);\nconst inBin = $input.item.binary.data;\nconst fileName = (inBin && inBin.fileName) || 'Документ.docx';\nconst buffer = await this.helpers.getBinaryDataBuffer(0, 'data');\nconst zip = new AdmZip(buffer);\nlet xml = zip.readAsText('word/document.xml');\nfor (const [key, val] of Object.entries(v)) {\n  if (SKIP.has(key) || key.endsWith('_file_id')) continue;\n  xml = xml.split('{{' + key + '}}').join(String(val ?? ''));\n}\nzip.updateFile('word/document.xml', Buffer.from(xml, 'utf8'));\nconst out = zip.toBuffer();\nconst binary = await this.helpers.prepareBinaryData(out, fileName, 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');\nreturn [{ json: { rendered: fileName }, binary: { data: binary } }];\n"
+      },
+      "id": "61dcc77e-d119-4eb5-ab3c-5a2666699fc8",
+      "name": "Рендер акта",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        5824,
+        2480
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "sendDocument",
+        "chatId": "={{ $('Объединить значения').item.json.chat_id }}",
+        "binaryData": true,
+        "additionalFields": {}
+      },
+      "id": "b950c245-be15-49d6-91e8-ece4a749cba9",
+      "name": "Telegram: акт",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        6016,
+        2480
+      ],
+      "webhookId": "p11-Telegram: акт",
+      "retryOnFail": true,
+      "maxTries": 4,
+      "waitBetweenTries": 1500,
+      "credentials": {
+        "telegramApi": {
+          "id": "aESJLABaZl21D7lx",
+          "name": "hr_assistant_kontur_bot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "authentication": "serviceAccount",
+        "operation": "download",
+        "fileId": {
+          "__rl": true,
+          "value": "={{ $('Объединить значения').item.json.сз_file_id }}",
+          "mode": "id"
+        },
+        "options": {
+          "binaryPropertyName": "data",
+          "googleFileConversion": {
+            "conversion": {
+              "docsToFormat": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            }
+          },
+          "fileName": "Служебная_записка.docx"
+        }
+      },
+      "id": "f32825a2-3bc4-4287-aa22-d75046054133",
+      "name": "Drive: скачать СЗ",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        6464,
+        2480
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1500,
+      "credentials": {
+        "googleApi": {
+          "id": "Mpwx0ehoX4NPqXcv",
+          "name": "N8N-kontur"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const AdmZip = require('adm-zip');\nconst v = $('Объединить значения').first().json;\nconst SKIP = new Set(['chat_id']);\nconst inBin = $input.item.binary.data;\nconst fileName = (inBin && inBin.fileName) || 'Документ.docx';\nconst buffer = await this.helpers.getBinaryDataBuffer(0, 'data');\nconst zip = new AdmZip(buffer);\nlet xml = zip.readAsText('word/document.xml');\nfor (const [key, val] of Object.entries(v)) {\n  if (SKIP.has(key) || key.endsWith('_file_id')) continue;\n  xml = xml.split('{{' + key + '}}').join(String(val ?? ''));\n}\nzip.updateFile('word/document.xml', Buffer.from(xml, 'utf8'));\nconst out = zip.toBuffer();\nconst binary = await this.helpers.prepareBinaryData(out, fileName, 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');\nreturn [{ json: { rendered: fileName }, binary: { data: binary } }];\n"
+      },
+      "id": "01dad122-5945-4610-a97a-424c48263bc2",
+      "name": "Рендер СЗ",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        6608,
+        2480
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "sendDocument",
+        "chatId": "={{ $('Объединить значения').item.json.chat_id }}",
+        "binaryData": true,
+        "additionalFields": {}
+      },
+      "id": "dad76dc6-b606-46f7-8d3e-851f8068ed42",
+      "name": "Telegram: СЗ",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        6752,
+        2480
+      ],
+      "webhookId": "p11-Telegram: СЗ",
+      "retryOnFail": true,
+      "maxTries": 4,
+      "waitBetweenTries": 1500,
+      "credentials": {
+        "telegramApi": {
+          "id": "aESJLABaZl21D7lx",
+          "name": "hr_assistant_kontur_bot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "нужна_сз",
+              "leftValue": "={{ $('Объединить значения').item.json.нужна_сз }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "d1a1192c-a4a3-4106-bc27-0c0e80703e66",
+      "name": "Нужна СЗ?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        6192,
+        2640
+      ]
+    },
+    {
+      "parameters": {
+        "content": "**Значения документов**\nМаппинг context → плейсхолдеры, даты ГГГГ-ММ-ДД→ДД.ММ.ГГГГ, дефолты [УТОЧНИТЬ]. Флаги DOC_MAP (нужен_акт/нужна_сз).",
+        "height": 214,
+        "width": 204,
+        "color": 6
+      },
+      "id": "a53c7c26-9d24-45d1-a298-7fdf4e014e80",
+      "name": "📌 note-values",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        4576,
+        2240
+      ]
+    },
+    {
+      "parameters": {
+        "content": "**Ollama: умные значения**\nqwen2.5:7b → JSON: фио_работника_род (падеж), обстоятельства, приложения. format=json.",
+        "height": 150,
+        "width": 220,
+        "color": 6
+      },
+      "id": "2c0780da-266f-4329-84c3-8e93c9564625",
+      "name": "📌 note-smart",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        4816,
+        2656
+      ]
+    },
+    {
+      "parameters": {
+        "content": "**Рендер акта / СЗ (adm-zip)**\nСкачанный .docx распаковывается, {{плейсхолдеры}} заменяются значениями, пакуется обратно. Требует NODE_FUNCTION_ALLOW_EXTERNAL=adm-zip.",
+        "height": 198,
+        "width": 260,
+        "color": 6
+      },
+      "id": "23b21136-f9a4-4b16-a20e-8b6fbf1346d5",
+      "name": "📌 note-render",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        5824,
+        2240
+      ]
+    },
+    {
+      "parameters": {
+        "content": "**Drive: скачать шаблон**\nService Account скачивает шаблон .docx из Google Drive (только чтение — без quota). fileId из «Значения».",
+        "height": 182,
+        "width": 204,
+        "color": 6
+      },
+      "id": "997ba935-ea8e-4469-b0e3-cc8d417475b0",
+      "name": "📌 note-drive",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        5584,
+        2272
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## Генерация документов (v6 — рендер .docx)\n\n**Вызывается из** HR-агента как tool `generate_documents`.\n\n**Поток:**\n1. Нормализовать данные → Выбор сценария → (данные прогула / заглушка)\n2. Vision (заглушка) → Промпт нарушения (RAG) → Ollama: нарушения\n3. **Значения документов** (маппинг context → плейсхолдеры + флаги DOC_MAP)\n4. **Ollama: умные значения** (падеж ФИО, обстоятельства, приложения — JSON)\n5. **Объединить значения** → развилки **Нужен акт? / Нужна СЗ?**\n6. Для каждого нужного документа: **Drive скачать шаблон → Рендер (adm-zip) → Telegram sendDocument**\n7. Финальный ответ (краткий) → Postgres кейс → Вернуть результат\n\n**Шаблоны** — в Google Drive (.docx с {{плейсхолдерами}}). Скачиваются Service Account'ом (только чтение), заполняются локально через adm-zip, не копируются (обход quota).\n\n⚠️ Нужен n8n с `NODE_FUNCTION_ALLOW_EXTERNAL=adm-zip`.",
+        "height": 740,
+        "width": 980,
+        "color": 4
+      },
+      "id": "2f134f4e-2fef-486d-afc8-cbe18a25e979",
+      "name": "📌 HR Generate — всё в одном1",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1392,
+        2048
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## Добавить новый сценарий\n\n1. В «Выбор сценария» (Switch) добавить ветку под новый scenario-ключ.\n2. В ноде **«Значения документов»** → карта `DOC_MAP`: добавить строку\n   `scenario: { нужен_акт: true/false, нужна_сз: true/false }`.\n3. Если нужны другие шаблоны — положить .docx в Google Drive, прописать fileId\n   в «Значения документов» (акт_file_id / сз_file_id).\n\nРазвилки «Нужен акт?» / «Нужна СЗ?» сами включат/выключат рендер по флагам.",
+        "height": 220,
+        "width": 360,
+        "color": 7
+      },
+      "id": "bd024edc-b95f-4896-b91c-e8d0da34dff7",
+      "name": "📌 Добавить новый сценарий1",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1984,
+        2416
       ]
     },
     {
@@ -80,52 +451,52 @@
           "fallbackOutput": "extra"
         }
       },
-      "id": "65b56c5d-f057-4596-82f9-d7b1d709d90b",
-      "name": "Выбор сценария",
+      "id": "fef36afb-0ba0-4b1b-bb10-0b7b123068ad",
+      "name": "Выбор сценария1",
       "type": "n8n-nodes-base.switch",
       "typeVersion": 3,
       "position": [
-        1104,
-        784
+        3056,
+        2464
       ]
     },
     {
       "parameters": {
-        "jsCode": "// TODO: добавить knowledge-файлы и убрать эту заглушку\n// Инструкция в sticky note «Добавить новый сценарий» (см. выше)\nconst d = $input.first().json;\nconst scenario = d.context?.scenario || 'unknown';\nreturn [{ json: {\n  ...d,\n  checklist_content: `[ЗАГЛУШКА] Сценарий \"${scenario}\" не реализован. Добавьте knowledge/${scenario}_checklist.md`,\n  tk_content: '[ЗАГЛУШКА] Нормативная база для сценария не загружена'\n} }];"
+        "jsCode": "// TODO: добавить knowledge-файлы и убрать эту заглушку\n// Инструкция в sticky note «Добавить новый сценарий» (см. выше)\nconst d = $input.first().json;\nconst scenario = d.context?.scenario || 'unknown';\nreturn [{ json: {\n  ...d,\n  checklist_content: `[ЗАГЛУШКА] Сценарий \"${scenario}\" не реализован. Добавьте knowledge/${scenario}_checklist.md`\n} }];"
       },
-      "id": "8c636b27-942b-41b5-ace4-9753183c17e0",
-      "name": "Сценарий: заглушка",
+      "id": "e8e825e4-1ab4-4db4-afe7-b218b24f6145",
+      "name": "Сценарий: заглушка1",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1344,
-        928
+        3296,
+        2608
       ]
     },
     {
       "parameters": {
         "jsCode": "// VISION STUB v1 — TODO: заменить на HTTP Request к vision-модели Ollama (qwen2-vl / llava)\n// Интерфейс: принимает evidenceDescription, возвращает { vision_stub, analysis }\n// При замене: убрать этот нод, добавить HTTP Request к http://127.0.0.1:11434/api/generate\n// с моделью qwen2-vl и base64-изображением в поле images[]\nconst d = $input.first().json;\nconst desc = d.context?.evidenceDescription || 'Доказательства не предоставлены';\nreturn [{ json: {\n  ...d,\n  vision_analysis: {\n    vision_stub: true,\n    analysis: desc,\n    _note: 'STUB: заменить на реальную vision-модель Ollama'\n  }\n} }];"
       },
-      "id": "1d169aaa-fdbd-4659-b4b8-926434d25ef8",
-      "name": "Vision: анализ доказательств (заглушка)",
+      "id": "df7914d3-c67b-4bef-915c-5654e7d216ac",
+      "name": "Vision: анализ доказательств (заглушка)1",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1568,
-        784
+        3520,
+        2464
       ]
     },
     {
       "parameters": {
-        "jsCode": "const d = $input.first().json;\nconst ctx = d.context;\nconst prompt = `Ты — юридический ассистент по трудовому праву. Твоя задача — кратко и точно сформулировать нарушение трудовых обязанностей со ссылками на нормативные акты.\\n\\n## Данные о нарушении\\nСотрудник: ${ctx.employee?.name || '[не указано]'}\\nДолжность: ${ctx.employee?.position || '[не указано]'}\\nПодразделение: ${ctx.employee?.department || '[не указано]'}\\nДата нарушения: ${ctx.violation?.date || '[не указано]'}\\nОписание: ${ctx.violation?.description || 'Прогул — отсутствие на рабочем месте без уважительной причины'}\\nУважительная причина: ${ctx.respectableReason ? 'Есть: ' + ctx.respectableReasonComment : 'Отсутствует'}\\n\\n## Чеклист (внутренняя инструкция)\\n${d.checklist_content}\\n\\n## Нормативная база\\n${d.tk_content}\\n\\n## Задача\\nСформулируй нарушение в 2-4 предложениях для включения в служебную записку. Укажи конкретные статьи, пункты. Формат: юридически грамотно, сухо, без лишних слов.\\nОтвечай ТОЛЬКО формулировкой нарушения, без вводных фраз.`;\nreturn [{ json: { ...d, prompt_rag: prompt } }];"
+        "jsCode": "const d = $input.first().json;\nconst ctx = d.context;\nconst prompt = `Ты — юридический ассистент по трудовому праву. Твоя задача — кратко и точно сформулировать нарушение трудовых обязанностей со ссылками на нормативные акты.\\n\\n## Данные о нарушении\\nСотрудник: ${ctx.employee?.name || '[не указано]'}\\nДолжность: ${ctx.employee?.position || '[не указано]'}\\nПодразделение: ${ctx.employee?.department || '[не указано]'}\\nДата нарушения: ${ctx.violation?.date || '[не указано]'}\\nОписание: ${ctx.violation?.description || 'Прогул — отсутствие на рабочем месте без уважительной причины'}\\nУважительная причина: ${ctx.respectableReason ? 'Есть: ' + ctx.respectableReasonComment : 'Отсутствует'}\\n\\n## Чеклист (внутренняя инструкция)\\n${d.checklist_content}\\n\\n## Задача\\nСформулируй нарушение в 2-4 предложениях для включения в служебную записку. Укажи конкретные статьи, пункты. Формат: юридически грамотно, сухо, без лишних слов.\\nОтвечай ТОЛЬКО формулировкой нарушения, без вводных фраз.`;\nreturn [{ json: { ...d, prompt_rag: prompt } }];"
       },
-      "id": "faeb7765-f131-44e1-a04d-065a0272caa8",
-      "name": "Промпт: нарушения (RAG)",
+      "id": "3169e60b-39e2-4d46-972b-0f30893f9543",
+      "name": "Промпт: нарушения (RAG)1",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1760,
-        784
+        3760,
+        2464
       ]
     },
     {
@@ -153,176 +524,39 @@
           "timeout": 60000
         }
       },
-      "id": "463c6306-954e-446a-a5b0-d6c0717fbac7",
-      "name": "Ollama: нарушения",
+      "id": "37eab58c-1d70-4974-af7c-45216e7a0ac9",
+      "name": "Ollama: нарушения1",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        1984,
-        784
+        3984,
+        2464
       ]
     },
     {
       "parameters": {
-        "jsCode": "const r = $input.first().json;\nconst violations = r.response?.trim() || '[Не удалось сформулировать нарушение]';\nconst prev = $('Vision: анализ доказательств (заглушка)').first().json;\nreturn [{ json: {\n  context: prev.context,\n  dates: prev.dates,\n  checklist_content: prev.checklist_content,\n  tk_content: prev.tk_content,\n  vision_analysis: prev.vision_analysis,\n  violations\n} }];"
+        "jsCode": "const r = $input.first().json;\nconst violations = r.response?.trim() || '[Не удалось сформулировать нарушение]';\nconst prev = $('Vision: анализ доказательств (заглушка)1').first().json;\nreturn [{ json: {\n  context: prev.context,\n  chat_id: prev.chat_id,\n  dates: prev.dates,\n  checklist_content: prev.checklist_content,\n  vision_analysis: prev.vision_analysis,\n  violations\n} }];"
       },
-      "id": "4c45b245-a7a5-4cca-aa5f-d9da98e9e71e",
-      "name": "Объединить нарушения",
+      "id": "924cb196-6fee-4eb4-b3a3-7a8e684de3f0",
+      "name": "Объединить нарушения1",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        2208,
-        784
+        4160,
+        2464
       ]
     },
     {
       "parameters": {
-        "rules": {
-          "values": [
-            {
-              "conditions": {
-                "options": {
-                  "caseSensitive": true,
-                  "leftValue": "",
-                  "typeValidation": "strict",
-                  "version": 1
-                },
-                "conditions": [
-                  {
-                    "id": "cond-need-act",
-                    "leftValue": "={{ $json.context.scenario }}",
-                    "rightValue": "progul_ochny",
-                    "operator": {
-                      "type": "string",
-                      "operation": "equals"
-                    }
-                  }
-                ],
-                "combinator": "and"
-              },
-              "renameOutput": true,
-              "outputKey": "да (прогул)"
-            }
-          ]
-        },
-        "options": {
-          "fallbackOutput": "extra"
-        }
+        "jsCode": "const out = '✅ Готово! Акт об отсутствии и служебная записка сформированы и отправлены файлами выше.\\n\\n'\n  + '⚠️ Проверьте документы и заполните поля [УТОЧНИТЬ] (свидетели, адрес, руководитель организации) перед подписанием.\\n'\n  + 'Передайте готовый пакет Черепановой Т. или Касмыниной О.';\nreturn [{ json: { output: out } }];\n"
       },
-      "id": "bb777ec0-9826-4060-9345-7846a19475d2",
-      "name": "Нужен акт?",
-      "type": "n8n-nodes-base.switch",
-      "typeVersion": 3,
-      "position": [
-        2416,
-        784
-      ]
-    },
-    {
-      "parameters": {
-        "method": "POST",
-        "url": "http://127.0.0.1:11434/api/generate",
-        "sendBody": true,
-        "bodyParameters": {
-          "parameters": [
-            {
-              "name": "model",
-              "value": "qwen2.5:7b"
-            },
-            {
-              "name": "prompt",
-              "value": "={{ $json.prompt_act }}"
-            },
-            {
-              "name": "stream",
-              "value": false
-            }
-          ]
-        },
-        "options": {
-          "timeout": 120000
-        }
-      },
-      "id": "5edd1eee-9f06-4507-96ce-21593be34a3d",
-      "name": "Ollama: генерация акта",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [
-        2880,
-        640
-      ]
-    },
-    {
-      "parameters": {
-        "jsCode": "// Для данного сценария акт об отсутствии не требуется\n// act_text остаётся пустым — финальный вывод это учтёт\nconst d = $input.first().json;\nreturn [{ json: { ...d, act_text: '' } }];"
-      },
-      "id": "122da5ba-abdc-462d-9510-61ea2c771ef1",
-      "name": "Акт не нужен",
+      "id": "b6c6470e-126d-4ac2-afc2-061d95be40a0",
+      "name": "Финальный ответ1",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        2640,
-        880
-      ]
-    },
-    {
-      "parameters": {
-        "jsCode": "const r = $input.first().json;\n// Если пришли из Ollama — берём response\n// Если пришли из «Акт не нужен» — берём act_text (пустой)\nconst act_text = r.response?.trim() || r.act_text || '';\nconst prev = $('Объединить нарушения').first().json;\nreturn [{ json: {\n  context: prev.context,\n  dates: prev.dates,\n  vision_analysis: prev.vision_analysis,\n  violations: prev.violations,\n  act_text\n} }];"
-      },
-      "id": "b3a6fcf6-70ec-4c9b-b32f-95eac6ba0435",
-      "name": "Объединить акт",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        3088,
-        784
-      ]
-    },
-    {
-      "parameters": {
-        "method": "POST",
-        "url": "http://127.0.0.1:11434/api/generate",
-        "sendBody": true,
-        "bodyParameters": {
-          "parameters": [
-            {
-              "name": "model",
-              "value": "qwen2.5:7b"
-            },
-            {
-              "name": "prompt",
-              "value": "={{ $json.prompt_sz }}"
-            },
-            {
-              "name": "stream",
-              "value": false
-            }
-          ]
-        },
-        "options": {
-          "timeout": 120000
-        }
-      },
-      "id": "bfdafe1f-2001-4568-857e-4f85e5f552f8",
-      "name": "Ollama: генерация СЗ",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [
-        3520,
-        784
-      ]
-    },
-    {
-      "parameters": {
-        "jsCode": "const r = $input.first().json;\nconst sz_text = r.response?.trim() || '[Не удалось сгенерировать служебную записку]';\nconst prev = $('Объединить акт').first().json;\nconst actBlock = prev.act_text\n  ? `📋 АКТ ОБ ОТСУТСТВИИ НА РАБОЧЕМ МЕСТЕ\\n\\n${prev.act_text}\\n\\n---\\n\\n`\n  : '';\nconst output = `✅ Документы сформированы!\\n\\n---\\n\\n${actBlock}📝 СЛУЖЕБНАЯ ЗАПИСКА\\n\\n${sz_text}\\n\\n---\\n\\n⚠️ Проверьте документы перед отправкой. Поля [УТОЧНИТЬ] требуют вашего заполнения.\\nПосле проверки — передайте пакет Черепановой Т. или Касмыниной О.`;\nreturn [{ json: { output, act_text: prev.act_text, sz_text } }];"
-      },
-      "id": "9800732a-428f-4757-941a-ff1b85e14944",
-      "name": "Финальный ответ",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        3744,
-        784
+        6992,
+        2608
       ]
     },
     {
@@ -331,71 +565,42 @@
         "height": 212,
         "width": 180
       },
-      "id": "9503f9f0-ee93-499a-a535-3d47b04808f0",
-      "name": "📌 HR Generate — всё в одном5",
+      "id": "8a8595cb-07c5-45ed-a1ff-adbe54e9a800",
+      "name": "📌 HR Generate — всё в одном6",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "position": [
-        1056,
-        944
+        2976,
+        2224
       ]
     },
     {
       "parameters": {
-        "jsCode": "// Обновить: отредактируй checklist и tk ниже\n// Источники: knowledge/progul_checklist.md, knowledge/progul_tk193.md\n\nconst checklist = `# Чеклист: Прогул\n\n## Квалификация\nОтсутствие работника на рабочем месте без уважительной причины или без согласования с непосредственным руководителем — дисциплинарное нарушение.\nВажно: обеденное время не засчитывается. При длительном прогуле исключаются: дни на больничном, в согласованном отпуске, выходные, праздники, дни командировки.\n\n## Порядок действий\n\nШаг 1. Свяжись с работником\n- Позвони по известному номеру телефона (в т.ч. из корпоративного справочника Стафф)\n- Если не выходит на связь — позвони родственникам по номерам из анкеты при трудоустройстве\n- Сделай запрос на корпоративную электронную почту работника\n- Используй соцсети, чтобы понять причину невыхода\n\nШаг 2. Зафиксируй неявку\n- Составь акт об отсутствии на рабочем месте в конце рабочего дня\n- В акте укажи ФИО трёх работников-свидетелей\n- Если работник не вышел на следующий день — повтори процедуру\n\nШаг 3. Передай информацию в отдел кадрового учёта\n- Сообщи Касмыниной Ольге или Черепановой Татьяне\n- В табеле будет проставлено: НН\n\nШаг 4. Инициируй служебную проверку\nПодготовь служебную записку:\n- ФИО и должность/подразделение работника\n- Дата и время отсутствия\n- Предпринятые меры\n- Обстоятельства отсутствия\n- Отсутствие больничного из Экстерн\n- Предложение о вынесении дисциплинарного взыскания\n\nШаг 5. Ожидай результаты служебной проверки\n\n## Нормативная основа\n- ТК РФ ст. 81 ч. 1 п. 6 пп. а\n- ТК РФ ст. 193\n- ПВТР Контура п. 13.2.1`;\n\nconst tk = `# ТК РФ — Статья 193\n\nДо применения дисциплинарного взыскания работодатель должен затребовать от работника письменное объяснение. Если по истечении двух рабочих дней объяснение не предоставлено — составляется акт.\n\nДисциплинарное взыскание применяется не позднее одного месяца со дня обнаружения проступка.\nДисциплинарное взыскание не может быть применено позднее шести месяцев со дня совершения проступка.\n\n## Буферные сроки (внутренние, Контур)\n// Внутреннее решение — не ТК РФ. Уточнять у Касмыниной О.\n- 5 месяцев 15 дней от даты совершения (вместо 6 месяцев)\n- 20 календарных дней от даты обнаружения (вместо 30 дней)\n\n## Нормативная основа для документов\n- ТК РФ ст. 81 ч. 1 п. 6 пп. а — прогул (отсутствие > 4 часов)\n- ТК РФ ст. 193 — порядок привлечения\n- ПВТР Контура — режим работы\n- Трудовой договор — рабочее место и режим`;\n\nconst d = $input.first().json;\nreturn [{ json: { ...d, checklist_content: checklist, tk_content: tk } }];"
+        "jsCode": "// Чеклист подгружается ДИНАМИЧЕСКИ из Google Drive (нода «Drive: скачать чеклист»).\n// Источник правды: knowledge/progul_checklist.md → выгружен в Google Drive\n// (fileId 1AkZ9oCM6EzNHewmEiwqvERmq9cKDMt0V). Команда правит чеклист прямо в Drive.\n// Сроки ст.193 здесь НЕ дублируются — они проверяются в main-агенте (calc_deadlines).\nconst AdmZip = require('adm-zip');\nlet checklist = '[чеклист не загружен из Drive]';\ntry {\n  const buf = await this.helpers.getBinaryDataBuffer(0, 'data');\n  if (buf && buf.length) {\n    // Google Doc export=text/plain → обычный текст; .docx → zip (PK..) → достаём из word/document.xml\n    if (buf[0] === 0x50 && buf[1] === 0x4B) {\n      const zip = new AdmZip(buf);\n      const xml = zip.readAsText('word/document.xml');\n      checklist = xml.replace(/<\\/w:p>/g, '\\n').replace(/<[^>]+>/g, '').replace(/[ \\t]+/g, ' ').trim();\n    } else {\n      checklist = buf.toString('utf8').replace(/^\\uFEFF/, '').trim();\n    }\n  }\n} catch (e) {\n  checklist = '[ошибка загрузки чеклиста из Drive: ' + e.message + ']';\n}\n\nconst d = $('Нормализовать данные').first().json;\nreturn [{ json: { ...d, checklist_content: checklist } }];"
       },
-      "id": "99a3c14f-0f2f-4d9c-b0b5-cbf52899afdc",
-      "name": "Прочитать данные прогула1",
+      "id": "a10be594-5227-437e-8625-53eb943ee006",
+      "name": "Прочитать данные прогула",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1344,
-        688
+        3296,
+        2368
       ]
     },
     {
       "parameters": {
-        "jsCode": "// ШАБЛОН ВШИТ — fs недоступен в n8n\n// Обновить: отредактируй template ниже\n// Источник: templates/act_progul.md\n\nconst template = `АКТ\nоб отсутствии работника на рабочем месте\n\nг. {{город}}, «{{день}}» {{месяц}} {{год}} г.\n\nНастоящий акт составлен в связи с отсутствием на рабочем месте работника:\n\nФИО: {{фио_работника}}\nДолжность: {{должность}}\nСтруктурное подразделение: {{подразделение}}\n\nДата отсутствия: {{дата_отсутствия}}\nВремя отсутствия: с {{время_начала}} по {{время_окончания}}\nПродолжительность отсутствия: {{продолжительность}}\n\nПопытки установить причину отсутствия:\n{{описание_попыток_связи}}\n\nПричина отсутствия: {{причина_или_не_установлена}}\n\nНастоящий акт составлен в присутствии:\n1. {{свидетель_1_фио}}, {{свидетель_1_должность}}  ___________\n2. {{свидетель_2_фио}}, {{свидетель_2_должность}}  ___________\n3. {{свидетель_3_фио}}, {{свидетель_3_должность}}  ___________\n\nНепосредственный руководитель:\n{{фио_руководителя}}, {{должность_руководителя}}  ___________\n\nС актом ознакомлен(а): ___________  /{{фио_работника}}/  «___» _________ {{год}} г.\n\n---\nИнструкции:\n- {{город}} — Екатеринбург если не указано иное\n- {{продолжительность}} — рассчитать из времени начала/окончания, исключить обед (1 час)\n- Свидетелей — оставить как {{свидетель_N_фио}} если не указаны\n- Нет данных — ставить [УТОЧНИТЬ]`;\n\nconst d = $input.first().json;\nconst ctx = d.context;\nconst today = new Date().toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' });\n\nconst prompt = `Ты — помощник HR-специалиста. Заполни шаблон акта об отсутствии на рабочем месте реальными данными.\n\n## Шаблон\n${template}\n\n## Данные для заполнения\nСотрудник (ФИО): ${ctx.employee?.name || '[УТОЧНИТЬ]'}\nДолжность: ${ctx.employee?.position || '[УТОЧНИТЬ]'}\nПодразделение: ${ctx.employee?.department || '[УТОЧНИТЬ]'}\nДата отсутствия: ${ctx.violation?.date || '[УТОЧНИТЬ]'}\nВремя отсутствия: с ${ctx.violation?.absenceStart || '09:00'} по ${ctx.violation?.absenceEnd || '18:00'}\nПопытки связи: ${ctx.contactAttempts || 'Предприняты попытки связаться по телефону и электронной почте'}\nУважительная причина: ${ctx.respectableReason ? ctx.respectableReasonComment : 'не установлена'}\nДоказательства: ${d.vision_analysis?.analysis || 'не предоставлены'}\nРуководитель (ФИО): ${ctx.manager?.name || '[УТОЧНИТЬ]'}\nДолжность руководителя: ${ctx.manager?.position || '[УТОЧНИТЬ]'}\nФормулировка нарушения: ${d.violations}\nСегодняшняя дата: ${today}\n\n## Инструкция\nЗаполни ВСЕ {{placeholders}} реальными данными. Нет данных — [УТОЧНИТЬ].\nВерни ТОЛЬКО готовый текст акта, без пояснений и markdown-обёрток.`;\n\nreturn [{ json: { ...d, prompt_act: prompt } }];"
-      },
-      "id": "7cd84d4e-e612-4bf3-94ee-3e9ea372c63e",
-      "name": "Промпт: акт об отсутствии1",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        2640,
-        656
-      ]
-    },
-    {
-      "parameters": {
-        "content": "**Вызов из агента**\nТочка входа. Принимает данные от hr_agent через toolWorkflow. Всё приходит в $json.",
-        "height": 154,
-        "width": 200,
-        "color": 6
-      },
-      "id": "e2b181b9-6622-4633-bb36-1518d64465cc",
-      "name": " ",
-      "type": "n8n-nodes-base.stickyNote",
-      "typeVersion": 1,
-      "position": [
-        128,
-        864
-      ]
-    },
-    {
-      "parameters": {
-        "content": "**Прочитать данные прогула**\nЧеклист + ТК ст.193 вшиты в код. Добавляет needAct=true и checklist_content, tk_content.",
+        "content": "**Прочитать данные прогула**\nЧеклист подгружается ДИНАМИЧЕСКИ из Drive (нода слева, fileId 1AkZ9…) — правится командой без касания workflow. Сроки ст.193 здесь НЕ дублируются — их считает main-агент (calc_deadlines). На выход: checklist_content.",
         "height": 180,
         "width": 184,
         "color": 6
       },
-      "id": "048d462c-7310-420c-b79f-0680d1e2e64b",
-      "name": "        ",
+      "id": "67a9680a-8e42-4048-a1ad-56cc76f769d1",
+      "name": "        1",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "position": [
-        1344,
-        496
+        3296,
+        2144
       ]
     },
     {
@@ -405,13 +610,13 @@
         "width": 200,
         "color": 3
       },
-      "id": "035a7887-0871-490e-9786-46bf7f880772",
-      "name": "         ",
+      "id": "d4f59e6a-c048-4f8c-92ef-5aaeabe39c3c",
+      "name": "         1",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "position": [
-        1344,
-        1072
+        3280,
+        2768
       ]
     },
     {
@@ -421,29 +626,29 @@
         "width": 216,
         "color": 3
       },
-      "id": "23e1cc38-037f-41c6-ac87-c519b3f5296d",
-      "name": "          ",
+      "id": "69745d6e-ce98-4b0b-b1f7-59b1f78c3b8b",
+      "name": "          1",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "position": [
-        1568,
-        624
+        3520,
+        2304
       ]
     },
     {
       "parameters": {
-        "content": "**Промпт: RAG**\nСобирает промпт: данные о сотруднике + чеклист + ТК. Результат → prompt_rag.",
+        "content": "**Промпт: RAG**\nСобирает промпт: данные о сотруднике + чеклист (из Drive). Результат → prompt_rag. Нормативка ст.193 здесь НЕ подаётся.",
         "height": 154,
         "width": 200,
         "color": 6
       },
-      "id": "cbf76d9a-fa4e-4758-aad0-29c833f83b90",
-      "name": "           ",
+      "id": "d528edf3-13ca-4932-ba62-c4af3f18e976",
+      "name": "           1",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "position": [
-        1760,
-        960
+        3712,
+        2640
       ]
     },
     {
@@ -453,13 +658,13 @@
         "width": 200,
         "color": 6
       },
-      "id": "8763f781-7020-4c3a-ad45-0fbd284cd817",
-      "name": "            ",
+      "id": "054960ae-fe1d-44e8-967f-66bba90dde45",
+      "name": "            1",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "position": [
-        1984,
-        576
+        3936,
+        2256
       ]
     },
     {
@@ -469,167 +674,58 @@
         "width": 200,
         "color": 6
       },
-      "id": "ef46b048-1848-425c-97ae-3ceda0768121",
-      "name": "             ",
+      "id": "ba9ae347-16cf-43e2-9ef7-1146d212b972",
+      "name": "             1",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "position": [
-        2192,
-        944
+        4144,
+        2624
       ]
     },
     {
       "parameters": {
-        "content": "**Нужен акт?**\nSwitch: progul_ochny → генерируем акт. Остальные сценарии → пропускаем.",
-        "height": 154,
-        "width": 200,
+        "content": "**Нужен акт? / Нужна СЗ?**\nIF-развилки по флагам `нужен_акт` / `нужна_сз` из DOC_MAP.\ntrue → рендерим документ; false → пропускаем. Данные берутся по ссылке на «Объединить значения».",
+        "height": 234,
+        "width": 408,
         "color": 6
       },
-      "id": "bfb224f6-9d63-42de-b99d-e74d70e40f60",
-      "name": "              ",
+      "id": "5c2416d3-8381-4ee4-ae12-a2f688236597",
+      "name": "              1",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "position": [
-        2352,
-        592
+        5680,
+        2784
       ]
     },
     {
       "parameters": {
-        "content": "**Промпт: акт**\nШаблон акта вшит в код. Собирает промпт с данными о сотруднике и нарушении.",
-        "height": 122,
-        "width": 200,
-        "color": 6
-      },
-      "id": "75fa271d-20fb-4f51-a624-f47785aa5635",
-      "name": "               ",
-      "type": "n8n-nodes-base.stickyNote",
-      "typeVersion": 1,
-      "position": [
-        2640,
-        512
-      ]
-    },
-    {
-      "parameters": {
-        "content": "**Ollama: акт**\nHTTP POST к qwen2.5:7b. Заполняет шаблон акта реальными данными. Таймаут 120с.",
-        "height": 122,
-        "width": 200,
-        "color": 6
-      },
-      "id": "26bf670c-d02f-48bd-9232-719cfeef7a96",
-      "name": "                ",
-      "type": "n8n-nodes-base.stickyNote",
-      "typeVersion": 1,
-      "position": [
-        2880,
-        512
-      ]
-    },
-    {
-      "parameters": {
-        "content": "**Акт не нужен**\nПробрасывает данные дальше с act_text=''. Для сценариев без акта об отсутствии.",
-        "height": 122,
-        "width": 216,
-        "color": 6
-      },
-      "id": "7ce87700-5746-44d1-866f-27dbb228104d",
-      "name": "                 ",
-      "type": "n8n-nodes-base.stickyNote",
-      "typeVersion": 1,
-      "position": [
-        2624,
-        1040
-      ]
-    },
-    {
-      "parameters": {
-        "content": "**Объединить акт**\nБерёт act_text из Ollama или пустую строку. Восстанавливает контекст из Объединить нарушения.",
+        "content": "**Финальный ответ**\nКраткий текст «✅ Готово, документы во вложении» агенту.\nСами .docx уходят файлами через Telegram sendDocument.",
         "height": 186,
-        "width": 168,
+        "width": 312,
         "color": 6
       },
-      "id": "a6120534-be04-4421-90aa-7f14c9d50a99",
-      "name": "                  ",
+      "id": "cbf887c3-964a-48e2-8d2d-3dea4df6374e",
+      "name": "                     1",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "position": [
-        3088,
-        912
+        6976,
+        2400
       ]
     },
     {
       "parameters": {
-        "content": "**Промпт: СЗ**\nШаблон СЗ вшит в код. Включает violations и act_text в промпт для служебной записки.",
-        "height": 154,
-        "width": 168,
-        "color": 6
+        "jsCode": "const raw = $input.first().json;\nlet data = raw;\nif (raw.query && typeof raw.query === 'object' && !Array.isArray(raw.query)) {\n  data = raw.query;\n} else if (typeof raw.input === 'string') {\n  try { data = JSON.parse(raw.input); } catch(e) {}\n} else if (typeof raw.query === 'string') {\n  try { data = JSON.parse(raw.query); } catch(e) {}\n}\nif (!data.employee) throw new Error('hr_generate: не переданы данные employee. Получено: ' + JSON.stringify(raw));\nif (!data.violation) throw new Error('hr_generate: не переданы данные violation.');\ndata.scenario = data.scenario || 'progul_ochny';\nreturn [{ json: {\n  context: data,\n  chat_id: data.chat_id || raw.chat_id || null,\n  evidence: data.evidence || raw.evidence || null,\n  violationDate: data.violation.date,\n  discoveryDate: data.violation.discoveryDate\n} }];\n"
       },
-      "id": "afc97ff0-9a27-4848-8677-35ca6ec5a181",
-      "name": "                   ",
-      "type": "n8n-nodes-base.stickyNote",
-      "typeVersion": 1,
-      "position": [
-        3296,
-        592
-      ]
-    },
-    {
-      "parameters": {
-        "content": "**Ollama: СЗ**\nHTTP POST к qwen2.5:7b. Заполняет шаблон служебной записки. Таймаут 120с.",
-        "height": 154,
-        "width": 216,
-        "color": 6
-      },
-      "id": "82b9cf14-6356-449a-b22e-d74cdf3ef1df",
-      "name": "                    ",
-      "type": "n8n-nodes-base.stickyNote",
-      "typeVersion": 1,
-      "position": [
-        3504,
-        944
-      ]
-    },
-    {
-      "parameters": {
-        "content": "**Финальный ответ**\nСобирает итоговое сообщение с актом + СЗ. Возвращает { output, act_text, sz_text } агенту.",
-        "height": 154,
-        "width": 184,
-        "color": 6
-      },
-      "id": "e845d749-1d98-4cb0-8adc-007f02a154d7",
-      "name": "                     ",
-      "type": "n8n-nodes-base.stickyNote",
-      "typeVersion": 1,
-      "position": [
-        3744,
-        608
-      ]
-    },
-    {
-      "parameters": {
-        "jsCode": "// ШАБЛОН ВШИТ — fs недоступен в n8n\n// Обновить: отредактируй template ниже\n// Источник: templates/sz_progul.md\n\nconst template = `СЛУЖЕБНАЯ ЗАПИСКА\n\nКому: {{адресат_фио}}, {{адресат_должность}}\nОт: {{фио_руководителя}}, {{должность_руководителя}}, {{подразделение_руководителя}}\nДата: «{{день}}» {{месяц}} {{год}} г.\n\nОб отсутствии работника на рабочем месте\n\nДовожу до Вашего сведения, что «{{дата_отсутствия}}» работник {{фио_работника}}, {{должность}}, {{подразделение}}, отсутствовал(а) на рабочем месте с {{время_начала}} до {{время_окончания}} ({{продолжительность}}) без уважительной причины и без согласования с непосредственным руководителем.\n\nПредпринятые меры:\n{{описание_мер}}\n\nОбстоятельства:\n{{обстоятельства_отсутствия}}\n\nНормативная основа:\n{{нормативная_ссылка}}\n\nПо состоянию на дату составления настоящей служебной записки сведения о наличии листка нетрудоспособности или иных документов, подтверждающих уважительность причины отсутствия, отсутствуют.\n\nНа основании изложенного прошу провести служебную проверку по факту нарушения трудовой дисциплины и рассмотреть вопрос о применении к {{фио_работника_род}} дисциплинарного взыскания.\n\nПриложения:\n1. Акт об отсутствии на рабочем месте от {{дата_отсутствия}}\n{{дополнительные_приложения}}\n\n{{фио_руководителя}}  ___________  «___» _________ {{год}} г.\n\n---\nИнструкции:\n- {{адресат_фио}} — Черепанова Т. / Касмынина О.\n- {{нормативная_ссылка}} — из violations (ТК РФ ст.81 п.6 пп.а, ПВТР, трудовой договор)\n- {{фио_работника_род}} — родительный падеж ФИО\n- Нет данных — ставить [УТОЧНИТЬ]`;\n\nconst d = $input.first().json;\nconst ctx = d.context;\nconst today = new Date().toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' });\n\nconst prompt = `Ты — помощник HR-специалиста. Заполни шаблон служебной записки реальными данными.\n\n## Шаблон\n${template}\n\n## Данные для заполнения\nСотрудник (ФИО): ${ctx.employee?.name || '[УТОЧНИТЬ]'}\nДолжность: ${ctx.employee?.position || '[УТОЧНИТЬ]'}\nПодразделение: ${ctx.employee?.department || '[УТОЧНИТЬ]'}\nДата нарушения: ${ctx.violation?.date || '[УТОЧНИТЬ]'}\nВремя отсутствия: с ${ctx.violation?.absenceStart || '09:00'} по ${ctx.violation?.absenceEnd || '18:00'}\nРуководитель (ФИО): ${ctx.manager?.name || '[УТОЧНИТЬ]'}\nДолжность руководителя: ${ctx.manager?.position || '[УТОЧНИТЬ]'}\nПодразделение руководителя: ${ctx.manager?.department || ctx.employee?.department || '[УТОЧНИТЬ]'}\nУважительная причина: ${ctx.respectableReason ? ctx.respectableReasonComment : 'не установлена'}\nПредпринятые меры: ${ctx.contactAttempts || 'Предприняты попытки связаться по телефону и электронной почте'}\nДоказательства: ${d.vision_analysis?.analysis || 'не предоставлены'}\nФормулировка нарушения: ${d.violations}\nАкт об отсутствии: ${d.act_text ? 'составлен' : 'не составлен'}\nСегодняшняя дата: ${today}\n\n## Инструкция\nЗаполни ВСЕ {{placeholders}} реальными данными. Нет данных — [УТОЧНИТЬ].\nВерни ТОЛЬКО готовый текст служебной записки, без пояснений и markdown-обёрток.`;\n\nreturn [{ json: { ...d, prompt_sz: prompt } }];"
-      },
-      "id": "212df917-0d3c-46ed-8799-38a4d90fe5ac",
-      "name": "Промпт: служебная записка2",
+      "id": "eb35c2e3-c4b9-4a74-b197-9590a990805f",
+      "name": "Нормализовать данные",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        3296,
-        752
-      ]
-    },
-    {
-      "parameters": {
-        "jsCode": "const raw = $input.first().json;\nlet data = raw;\nif (raw.query && typeof raw.query === 'object' && !Array.isArray(raw.query)) {\n  data = raw.query;\n} else if (typeof raw.input === 'string') {\n  try { data = JSON.parse(raw.input); } catch(e) {}\n} else if (typeof raw.query === 'string') {\n  try { data = JSON.parse(raw.query); } catch(e) {}\n}\nif (!data.employee) throw new Error('hr_generate: не переданы данные employee. Получено: ' + JSON.stringify(raw));\nif (!data.violation) throw new Error('hr_generate: не переданы данные violation.');\ndata.scenario = data.scenario || 'progul_ochny';\nreturn [{ json: {\n  context: data,\n  violationDate: data.violation.date,\n  discoveryDate: data.violation.discoveryDate\n} }];"
-      },
-      "id": "975b2ea6-b438-40b3-be62-8b822f9e45a3",
-      "name": "Нормализовать данные1",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        832,
-        752
+        2784,
+        2432
       ]
     },
     {
@@ -639,13 +735,353 @@
         "width": 200,
         "color": 6
       },
-      "id": "5ba450c3-b88d-46c1-b98a-43cd7394974b",
-      "name": "  ",
+      "id": "438ef34f-bf58-4f37-9cdb-8ce359181a4a",
+      "name": "  1",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "position": [
-        432,
-        496
+        2768,
+        2592
+      ]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Нормализовать данные').item.json.chat_id }}",
+        "text": "⏳ Анализирую нарушение…",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "id": "b5fe53d8-3ffe-4ce7-a745-22524cfddd14",
+      "name": "Статус: анализ нарушения1",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        3968,
+        2048
+      ],
+      "webhookId": "hrgen-Статус: анализ нарушения",
+      "retryOnFail": true,
+      "maxTries": 4,
+      "waitBetweenTries": 1500,
+      "credentials": {
+        "telegramApi": {
+          "id": "aESJLABaZl21D7lx",
+          "name": "hr_assistant_kontur_bot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "schema": {
+          "__rl": true,
+          "value": "public",
+          "mode": "list"
+        },
+        "table": {
+          "__rl": true,
+          "value": "hr_cases",
+          "mode": "list"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "chat_id": "={{ $('Нормализовать данные').item.json.chat_id }}",
+            "manager_name": "={{ $('Нормализовать данные').item.json.context.manager.name }}",
+            "employee_name": "={{ $('Нормализовать данные').item.json.context.employee.name }}",
+            "department": "={{ $('Нормализовать данные').item.json.context.employee.department }}",
+            "scenario": "={{ $('Нормализовать данные').item.json.context.scenario }}",
+            "violation_date": "={{ $('Нормализовать данные').item.json.context.violation.date }}",
+            "discovery_date": "={{ $('Нормализовать данные').item.json.context.violation.discoveryDate }}",
+            "is_expired": "={{ false }}",
+            "docs_generated": "={{ true }}",
+            "raw_data": "={{ JSON.stringify($('Нормализовать данные').item.json.context) }}",
+            "id": 0
+          },
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [
+            {
+              "id": "id",
+              "displayName": "id",
+              "required": false,
+              "defaultMatch": true,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "chat_id",
+              "displayName": "chat_id",
+              "required": true,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "created_at",
+              "displayName": "created_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "manager_name",
+              "displayName": "manager_name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "employee_name",
+              "displayName": "employee_name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "department",
+              "displayName": "department",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "scenario",
+              "displayName": "scenario",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "violation_date",
+              "displayName": "violation_date",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "discovery_date",
+              "displayName": "discovery_date",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "is_expired",
+              "displayName": "is_expired",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "boolean",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "docs_generated",
+              "displayName": "docs_generated",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "boolean",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "raw_data",
+              "displayName": "raw_data",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "object",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "73d86552-7cdd-489e-909f-e3a247c20525",
+      "name": "Postgres: запись кейса1",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        7312,
+        2608
+      ],
+      "retryOnFail": true,
+      "maxTries": 4,
+      "waitBetweenTries": 1500,
+      "credentials": {
+        "postgres": {
+          "id": "3W634hxRLEp3sfjP",
+          "name": "Postgres account 4"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{ json: $('Финальный ответ1').item.json }];"
+      },
+      "id": "ec156fe1-13e2-4354-8c31-07221e308956",
+      "name": "Вернуть результат1",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        7568,
+        2608
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "нужен_акт",
+              "leftValue": "={{ $('Объединить значения').item.json.нужен_акт }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "df5c96c2-10f4-4174-98b7-b940b31e6509",
+      "name": "Нужен акт?1",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        5472,
+        2640
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "serviceAccount",
+        "operation": "download",
+        "fileId": {
+          "__rl": true,
+          "value": "1AkZ9oCM6EzNHewmEiwqvERmq9cKDMt0V",
+          "mode": "id"
+        },
+        "options": {
+          "binaryPropertyName": "data",
+          "googleFileConversion": {
+            "conversion": {
+              "docsToFormat": "text/plain"
+            }
+          },
+          "fileName": "progul_checklist.txt"
+        }
+      },
+      "id": "chk-drive-download",
+      "name": "Drive: скачать чеклист",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        3088,
+        2192
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1500,
+      "credentials": {
+        "googleApi": {
+          "id": "Mpwx0ehoX4NPqXcv",
+          "name": "N8N-kontur"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "content": "🧹 Убрана вшитая ст.193.\nЧеклист теперь из Drive,\nсроки 193 → calc_deadlines (main).",
+        "height": 80,
+        "width": 190,
+        "color": 1
+      },
+      "id": "cleanup-193-read",
+      "name": "cleanup-193-read",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        3296,
+        2300
+      ]
+    },
+    {
+      "parameters": {
+        "content": "🧹 Убрана секция\n«## Нормативная база»\n(${d.tk_content}) из промпта.",
+        "height": 80,
+        "width": 190,
+        "color": 1
+      },
+      "id": "cleanup-193-rag",
+      "name": "cleanup-193-rag",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        3760,
+        2300
+      ]
+    },
+    {
+      "parameters": {
+        "content": "🧹 Убран проброс\ntk_content.",
+        "height": 80,
+        "width": 190,
+        "color": 1
+      },
+      "id": "cleanup-193-merge",
+      "name": "cleanup-193-merge",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        4160,
+        2300
+      ]
+    },
+    {
+      "parameters": {
+        "content": "🧹 Убран tk_content\nиз заглушки.",
+        "height": 80,
+        "width": 190,
+        "color": 1
+      },
+      "id": "cleanup-193-stub",
+      "name": "cleanup-193-stub",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        3056,
+        2620
       ]
     }
   ],
@@ -653,27 +1089,19 @@
     "Вызов из агента": [
       {
         "json": {
-          "scenario": "progul_ochny",
-          "employee": {
-            "name": "Иванов Иван Иванович",
-            "position": "менеджер проектов",
-            "department": "ООП (общий отдел продаж)"
-          },
-          "violation": {
-            "date": "2026-06-09",
-            "discoveryDate": "2026-06-09",
-            "absenceStart": "08:00",
-            "absenceEnd": "17:00",
-            "description": "Полный рабочий день"
-          },
-          "respectableReason": false,
+          "query": "{\"scenario\":\"progul_ochny\",\"employee\":{\"name\":\"Иванов Иван Иванович\",\"position\":\"менеджер продаж\",\"department\":\"УПО\"},\"violation\":{\"date\":\"2026-06-15\",\"discoveryDate\":\"2026-06-15\",\"absenceStart\":\"10:00\",\"absenceEnd\":\"19:00\",\"description\":\"Отсутствовал на рабочем месте весь рабочий день без уважительной причины и без согласования с руководителем.\"},\"respectableReason\":false,\"respectableReasonComment\":\"\",\"evidenceDescription\":\"Фото с рабочего места\",\"contactAttempts\":\"Связаться удалось только на следующий день. Сотрудник сообщил, что хотел отдохнуть и посидеть дома. Заранее об отсутствии не предупреждал.\",\"manager\":{\"name\":\"Смолов Артём Викторович\",\"position\":\"руководитель отдела продаж\"}}",
+          "scenario": "",
+          "employee": 0,
+          "violation": "",
+          "respectableReason": "",
           "respectableReasonComment": "",
-          "evidenceDescription": "Скриншоты СКУД, сфотканные несколько раз в течение дня с фиксацией времени.",
-          "contactAttempts": "Не удалось связаться",
-          "manager": {
-            "name": "Иванов Иван Иванович",
-            "position": "менеджер проектов"
-          }
+          "evidenceDescription": "",
+          "contactAttempts": "",
+          "manager": "",
+          "chat_id": "825874093"
+        },
+        "pairedItem": {
+          "item": 0
         }
       }
     ]
@@ -683,186 +1111,286 @@
       "main": [
         [
           {
-            "node": "Нормализовать данные1",
+            "node": "Нормализовать данные",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Выбор сценария": {
+    "Значения документов": {
       "main": [
         [
           {
-            "node": "Прочитать данные прогула1",
+            "node": "Ollama: умные значения",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ollama: умные значения": {
+      "main": [
+        [
+          {
+            "node": "Объединить значения",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Объединить значения": {
+      "main": [
+        [
+          {
+            "node": "Статус: готовлю документы",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Статус: готовлю документы": {
+      "main": [
+        [
+          {
+            "node": "Нужен акт?1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Drive: скачать акт": {
+      "main": [
+        [
+          {
+            "node": "Рендер акта",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Рендер акта": {
+      "main": [
+        [
+          {
+            "node": "Telegram: акт",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Telegram: акт": {
+      "main": [
+        [
+          {
+            "node": "Нужна СЗ?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Drive: скачать СЗ": {
+      "main": [
+        [
+          {
+            "node": "Рендер СЗ",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Рендер СЗ": {
+      "main": [
+        [
+          {
+            "node": "Telegram: СЗ",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Telegram: СЗ": {
+      "main": [
+        [
+          {
+            "node": "Финальный ответ1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Нужна СЗ?": {
+      "main": [
+        [
+          {
+            "node": "Drive: скачать СЗ",
             "type": "main",
             "index": 0
           }
         ],
         [
           {
-            "node": "Сценарий: заглушка",
+            "node": "Финальный ответ1",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Сценарий: заглушка": {
+    "Выбор сценария1": {
       "main": [
         [
           {
-            "node": "Vision: анализ доказательств (заглушка)",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Vision: анализ доказательств (заглушка)": {
-      "main": [
-        [
-          {
-            "node": "Промпт: нарушения (RAG)",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Промпт: нарушения (RAG)": {
-      "main": [
-        [
-          {
-            "node": "Ollama: нарушения",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Ollama: нарушения": {
-      "main": [
-        [
-          {
-            "node": "Объединить нарушения",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Объединить нарушения": {
-      "main": [
-        [
-          {
-            "node": "Нужен акт?",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Нужен акт?": {
-      "main": [
-        [
-          {
-            "node": "Промпт: акт об отсутствии1",
+            "node": "Drive: скачать чеклист",
             "type": "main",
             "index": 0
           }
         ],
         [
           {
-            "node": "Акт не нужен",
+            "node": "Сценарий: заглушка1",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Ollama: генерация акта": {
+    "Сценарий: заглушка1": {
       "main": [
         [
           {
-            "node": "Объединить акт",
+            "node": "Vision: анализ доказательств (заглушка)1",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Акт не нужен": {
+    "Vision: анализ доказательств (заглушка)1": {
       "main": [
         [
           {
-            "node": "Объединить акт",
+            "node": "Промпт: нарушения (RAG)1",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Объединить акт": {
+    "Промпт: нарушения (RAG)1": {
       "main": [
         [
           {
-            "node": "Промпт: служебная записка2",
+            "node": "Статус: анализ нарушения1",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Ollama: нарушения1",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Ollama: генерация СЗ": {
+    "Ollama: нарушения1": {
       "main": [
         [
           {
-            "node": "Финальный ответ",
+            "node": "Объединить нарушения1",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Прочитать данные прогула1": {
+    "Объединить нарушения1": {
       "main": [
         [
           {
-            "node": "Vision: анализ доказательств (заглушка)",
+            "node": "Значения документов",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Промпт: акт об отсутствии1": {
+    "Финальный ответ1": {
       "main": [
         [
           {
-            "node": "Ollama: генерация акта",
+            "node": "Postgres: запись кейса1",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Промпт: служебная записка2": {
+    "Прочитать данные прогула": {
       "main": [
         [
           {
-            "node": "Ollama: генерация СЗ",
+            "node": "Vision: анализ доказательств (заглушка)1",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Нормализовать данные1": {
+    "Нормализовать данные": {
       "main": [
         [
           {
-            "node": "Выбор сценария",
+            "node": "Выбор сценария1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Postgres: запись кейса1": {
+      "main": [
+        [
+          {
+            "node": "Вернуть результат1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Нужен акт?1": {
+      "main": [
+        [
+          {
+            "node": "Drive: скачать акт",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Нужна СЗ?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Drive: скачать чеклист": {
+      "main": [
+        [
+          {
+            "node": "Прочитать данные прогула",
             "type": "main",
             "index": 0
           }
@@ -876,7 +1404,7 @@
     "binaryMode": "separate",
     "availableInMCP": false
   },
-  "versionId": "564fb7a1-e0bf-4325-a77b-284716992443",
+  "versionId": "d0b2c1d7-e86e-49da-9182-d52b220ff30f",
   "meta": {
     "templateCredsSetupCompleted": true,
     "instanceId": "9a987c8c5e53be071f8410e33526cc5ade2a52fb0a040cf9a29e79d0943782f4"

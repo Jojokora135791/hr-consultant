@@ -1,0 +1,167 @@
+{
+  "name": "Тест docx-рендер",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## Тест рендера обоих .docx (adm-zip)\n\nset → 2 ветки (акт / СЗ): download шаблона → Code (универсальная замена всех {{ключ}}) → Telegram.\n\nУниверсальный Code: заменяет {{имя_поля}} на значение из «Значения» по всем ключам.\nДобавишь поле в Set — оно подставится автоматически. Имя файла берётся из download (fileName).\nНужно: n8n с NODE_FUNCTION_ALLOW_EXTERNAL=adm-zip.",
+        "height": 380,
+        "width": 900,
+        "color": 5
+      },
+      "id": "note-1",
+      "name": "📌 Тест docx (оба)",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [-60, -120]
+    },
+    {
+      "parameters": {},
+      "id": "trg-1",
+      "name": "Запуск вручную",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [0, 300]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            { "id": "f1", "name": "акт_file_id", "value": "1pz4mHqz6dleQKZvit3VRfXs_h95VWqKl", "type": "string" },
+            { "id": "f2", "name": "сз_file_id", "value": "1iiqEDumDy61qRr9lv0kFGpkUB3hTpkWd", "type": "string" },
+            { "id": "f3", "name": "chat_id", "value": "825874093", "type": "string" },
+            { "id": "p1", "name": "организация", "value": "ООО «ТК Контур»", "type": "string" },
+            { "id": "p2", "name": "город", "value": "г. Екатеринбург", "type": "string" },
+            { "id": "p3", "name": "адрес", "value": "г. Екатеринбург, ул. Малопрудная, 5", "type": "string" },
+            { "id": "p4", "name": "дата_составления", "value": "16.06.2026", "type": "string" },
+            { "id": "p5", "name": "дата_отсутствия", "value": "14.06.2026", "type": "string" },
+            { "id": "p6", "name": "год", "value": "2026", "type": "string" },
+            { "id": "p7", "name": "время_начала", "value": "10:00", "type": "string" },
+            { "id": "p8", "name": "время_окончания", "value": "19:00", "type": "string" },
+            { "id": "p9", "name": "время_составления", "value": "17:00", "type": "string" },
+            { "id": "p10", "name": "подразделение", "value": "группа продаж №1 отдела активных продаж", "type": "string" },
+            { "id": "p11", "name": "должность_работника", "value": "менеджер по продажам", "type": "string" },
+            { "id": "p12", "name": "фио_работника", "value": "Иванов Иван Иванович", "type": "string" },
+            { "id": "p13", "name": "фио_работника_род", "value": "Иванову Ивану Ивановичу", "type": "string" },
+            { "id": "p14", "name": "должность_составителя", "value": "руководитель группы продаж №1", "type": "string" },
+            { "id": "p15", "name": "фио_составителя", "value": "Петров Пётр Петрович", "type": "string" },
+            { "id": "p16", "name": "свидетель_1_должность", "value": "менеджер по продажам", "type": "string" },
+            { "id": "p17", "name": "свидетель_1_фио", "value": "Сидоров Сидор Сидорович", "type": "string" },
+            { "id": "p18", "name": "свидетель_2_должность", "value": "менеджер по продажам", "type": "string" },
+            { "id": "p19", "name": "свидетель_2_фио", "value": "Кузнецов Кузьма Кузьмич", "type": "string" },
+            { "id": "p20", "name": "должность_руководителя_организации", "value": "Генеральный директор", "type": "string" },
+            { "id": "p21", "name": "фио_руководителя_организации", "value": "[УТОЧНИТЬ]", "type": "string" },
+            { "id": "p22", "name": "должность_автора", "value": "руководитель группы продаж №1", "type": "string" },
+            { "id": "p23", "name": "подразделение_автора", "value": "отдел активных продаж", "type": "string" },
+            { "id": "p24", "name": "фио_автора", "value": "Петров Пётр Петрович", "type": "string" },
+            { "id": "p25", "name": "обстоятельства", "value": "Связаться с сотрудником удалось только на следующий день. Сотрудник сообщил, что помогал брату. Заранее об отсутствии не предупреждал. Уважительная причина не установлена.", "type": "string" },
+            { "id": "p26", "name": "приложения", "value": "1. Скриншот переписки с сотрудником на 1 л.", "type": "string" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "set-1",
+      "name": "Значения",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [220, 300]
+    },
+    {
+      "parameters": {
+        "operation": "download",
+        "fileId": { "__rl": true, "value": "={{ $json.акт_file_id }}", "mode": "id" },
+        "options": {
+          "googleFileConversion": { "conversion": { "docsToFormat": "application/vnd.openxmlformats-officedocument.wordprocessingml.document" } },
+          "binaryPropertyName": "data",
+          "fileName": "Акт_об_отсутствии.docx"
+        }
+      },
+      "id": "gd-act",
+      "name": "Drive: скачать акт",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [460, 180],
+      "credentials": { "googleApi": { "id": "", "name": "N8N-kontur" } }
+    },
+    {
+      "parameters": {
+        "operation": "download",
+        "fileId": { "__rl": true, "value": "={{ $json.сз_file_id }}", "mode": "id" },
+        "options": {
+          "googleFileConversion": { "conversion": { "docsToFormat": "application/vnd.openxmlformats-officedocument.wordprocessingml.document" } },
+          "binaryPropertyName": "data",
+          "fileName": "Служебная_записка.docx"
+        }
+      },
+      "id": "gd-sz",
+      "name": "Drive: скачать СЗ",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [460, 420],
+      "credentials": { "googleApi": { "id": "", "name": "N8N-kontur" } }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Универсальный рендер .docx: заменяем {{имя_поля}} на значения из ноды «Значения».\n// Требует NODE_FUNCTION_ALLOW_EXTERNAL=adm-zip.\nconst AdmZip = require('adm-zip');\n\nconst v = $('Значения').first().json;\nconst SKIP = new Set(['chat_id']);\n\nconst inBin = $input.item.binary.data;\nconst fileName = (inBin && inBin.fileName) || 'Документ.docx';\nconst buffer = await this.helpers.getBinaryDataBuffer(0, 'data');\n\nconst zip = new AdmZip(buffer);\nlet xml = zip.readAsText('word/document.xml');\nfor (const [key, val] of Object.entries(v)) {\n  if (SKIP.has(key) || key.endsWith('_file_id')) continue;\n  xml = xml.split('{{' + key + '}}').join(String(val ?? ''));\n}\nzip.updateFile('word/document.xml', Buffer.from(xml, 'utf8'));\nconst out = zip.toBuffer();\n\nconst binary = await this.helpers.prepareBinaryData(out, fileName, 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');\nreturn [{ json: { rendered: fileName }, binary: { data: binary } }];\n"
+      },
+      "id": "code-act",
+      "name": "Рендер акта",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [700, 180]
+    },
+    {
+      "parameters": {
+        "jsCode": "const AdmZip = require('adm-zip');\nconst v = $('Значения').first().json;\nconst SKIP = new Set(['chat_id']);\nconst inBin = $input.item.binary.data;\nconst fileName = (inBin && inBin.fileName) || 'Документ.docx';\nconst buffer = await this.helpers.getBinaryDataBuffer(0, 'data');\nconst zip = new AdmZip(buffer);\nlet xml = zip.readAsText('word/document.xml');\nfor (const [key, val] of Object.entries(v)) {\n  if (SKIP.has(key) || key.endsWith('_file_id')) continue;\n  xml = xml.split('{{' + key + '}}').join(String(val ?? ''));\n}\nzip.updateFile('word/document.xml', Buffer.from(xml, 'utf8'));\nconst out = zip.toBuffer();\nconst binary = await this.helpers.prepareBinaryData(out, fileName, 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');\nreturn [{ json: { rendered: fileName }, binary: { data: binary } }];\n"
+      },
+      "id": "code-sz",
+      "name": "Рендер СЗ",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [700, 420]
+    },
+    {
+      "parameters": {
+        "operation": "sendDocument",
+        "chatId": "={{ $('Значения').item.json.chat_id }}",
+        "binaryData": true,
+        "binaryPropertyName": "data",
+        "additionalFields": {}
+      },
+      "id": "tg-act",
+      "name": "Telegram: акт",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [940, 180],
+      "webhookId": "test-docx-act",
+      "credentials": { "telegramApi": { "id": "", "name": "hr_assistant_kontur_bot" } }
+    },
+    {
+      "parameters": {
+        "operation": "sendDocument",
+        "chatId": "={{ $('Значения').item.json.chat_id }}",
+        "binaryData": true,
+        "binaryPropertyName": "data",
+        "additionalFields": {}
+      },
+      "id": "tg-sz",
+      "name": "Telegram: СЗ",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [940, 420],
+      "webhookId": "test-docx-sz",
+      "credentials": { "telegramApi": { "id": "", "name": "hr_assistant_kontur_bot" } }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Запуск вручную": { "main": [[{ "node": "Значения", "type": "main", "index": 0 }]] },
+    "Значения": { "main": [[{ "node": "Drive: скачать акт", "type": "main", "index": 0 }, { "node": "Drive: скачать СЗ", "type": "main", "index": 0 }]] },
+    "Drive: скачать акт": { "main": [[{ "node": "Рендер акта", "type": "main", "index": 0 }]] },
+    "Рендер акта": { "main": [[{ "node": "Telegram: акт", "type": "main", "index": 0 }]] },
+    "Drive: скачать СЗ": { "main": [[{ "node": "Рендер СЗ", "type": "main", "index": 0 }]] },
+    "Рендер СЗ": { "main": [[{ "node": "Telegram: СЗ", "type": "main", "index": 0 }]] }
+  },
+  "active": false,
+  "settings": { "executionOrder": "v1" },
+  "tags": []
+}
