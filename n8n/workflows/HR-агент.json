@@ -13,7 +13,7 @@
       "type": "n8n-nodes-base.telegramTrigger",
       "typeVersion": 1.2,
       "position": [
-        1776,
+        1632,
         624
       ],
       "webhookId": "hr-agent-telegram-v6",
@@ -33,7 +33,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        2000,
+        1856,
         624
       ]
     },
@@ -67,8 +67,234 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
       "position": [
-        2224,
+        2080,
         624
+      ]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $json.chat_id }}",
+        "text": "=={{ $json.text }}",
+        "additionalFields": {
+          "appendAttribution": false,
+          "parse_mode": "HTML"
+        }
+      },
+      "id": "c349aaf7-f188-47be-b81e-f187051b3d79",
+      "name": "Telegram: ответ",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        3328,
+        624
+      ],
+      "webhookId": "hr-agent-telegram-out-v6",
+      "credentials": {
+        "telegramApi": {
+          "id": "aESJLABaZl21D7lx",
+          "name": "hr_assistant_kontur_bot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sessionIdType": "customKey",
+        "sessionKey": "={{ $('Telegram: входящие').item.json.message.chat.id }}",
+        "contextWindowLength": 30
+      },
+      "id": "ceb80863-2f00-4d5c-9113-a06b53a331ca",
+      "name": "Postgres память",
+      "type": "@n8n/n8n-nodes-langchain.memoryPostgresChat",
+      "typeVersion": 1.3,
+      "position": [
+        2816,
+        848
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "Fvszl2WiBUELNhgw",
+          "name": "hr_assistant_psql"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "content": "## HR-агент v6 (Telegram + Postgres)\n\n**Точка входа — Telegram-бот.** Агент ведёт диалог с руководителем, собирает данные, проверяет сроки и вызывает генерацию.\n\n**Вход:** Telegram Trigger → Нормализация (text/photo + валидация фото) → агент.\n**Выход:** агент → Telegram: ответ.\n**Память:** Postgres Chat Memory (sessionKey = chat_id).\n\n**Инструменты:**\n- calc_deadlines (Code Tool) — проверка сроков ст.193 ДО генерации\n- generate_documents → Генерация документов: акт + служебная записка",
+        "height": 520,
+        "width": 900,
+        "color": 4
+      },
+      "id": "aef6e9c2-4de9-4af3-a2eb-ed3b60d5b026",
+      "name": "📌 HR-агент — точка входа1",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1200,
+        -32
+      ]
+    },
+    {
+      "parameters": {
+        "name": "calc_deadlines",
+        "description": "Рассчитывает крайние сроки привлечения к дисциплинарной ответственности и определяет, истёк ли срок. Вход — строка с датами в формате ГГГГ-ММ-ДД (сначала дата нарушения, затем дата обнаружения). Возвращает JSON: isExpired, expiredReason, violationDeadline, discoveryDeadline.",
+        "jsCode": "// query — строка от агента, напр.: \"violationDate=2026-01-15; discoveryDate=2026-01-20\"\n// Сроки — внутренний буфер Контура (НЕ дословно ТК РФ):\n//   нарушение: +5 мес 15 дн;  обнаружение: +20 дн.\n// ТК РФ baseline: 6 мес / 30 дн. Уточнять у Касмыниной О.\nconst text = String(query || '');\nconst dates = text.match(/\\d{4}-\\d{2}-\\d{2}/g) || [];\nconst violationStr = dates[0];\nconst discoveryStr = dates[1] || dates[0];\nif (!violationStr) {\n  return JSON.stringify({ error: 'Не нашёл дат в формате ГГГГ-ММ-ДД', received: text });\n}\nconst now = new Date();\nconst violationDate = new Date(violationStr);\nconst discoveryDate = new Date(discoveryStr);\nconst vDeadline = new Date(violationDate);\nvDeadline.setMonth(vDeadline.getMonth() + 5);\nvDeadline.setDate(vDeadline.getDate() + 15);\nconst dDeadline = new Date(discoveryDate);\ndDeadline.setDate(dDeadline.getDate() + 20);\nconst expiredByViolation = now >= vDeadline;\nconst expiredByDiscovery = now >= dDeadline;\nconst fmt = (d) => d.toISOString().split('T')[0];\nreturn JSON.stringify({\n  isExpired: expiredByViolation || expiredByDiscovery,\n  expiredReason: expiredByViolation ? 'violation_date' : (expiredByDiscovery ? 'discovery_date' : null),\n  violationDeadline: fmt(vDeadline),\n  discoveryDeadline: fmt(dDeadline),\n  today: fmt(now)\n});\n"
+      },
+      "type": "@n8n/n8n-nodes-langchain.toolCode",
+      "typeVersion": 1,
+      "position": [
+        3008,
+        816
+      ],
+      "id": "2974c597-a4df-431b-a652-08194e0c8d19",
+      "name": "Рассчитать сроки ст.1"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $('Нормализация входа TG').item.json.normalized_text }}",
+        "options": {
+          "systemMessage": "Ты — HR-ассистент для руководителей компании Контур. Помогаешь оформить дисциплинарные документы: акт об отсутствии и служебную записку.\n\n\n\n## Твоя роль\n- Задаёшь вопросы и собираешь факты — не додумываешь ничего сам. Либо додумываешь, но совсем немного, например помогаешь доофорить просто дату в нужный формат\n- Работаешь строго в рамках предоставленных данных\n- Граница: до передачи документов кадровому эксперту включительно\n- Если ситуация нестандартная — направляй к Касмыниной О. или Черепановой Т.\n\n## Интерфейс\nТы общаешься с руководителем в Telegram. Сообщения о доказательствах в квадратных скобках вида\n«[Доказательство-фото получено...]» — это служебные маркеры от системы, НЕ текст руководителя:\nвоспринимай их как факт о приложенном файле и продолжай диалог по алгоритму.\n\n## Алгоритм работы\n\n### Шаг 1. Приветствие и выяснение ситуации\nПоздоровайся и попроси описать ситуацию.\n\n### Шаг 2. Сбор данных о нарушении\nПоследовательно уточни (по одному вопросу за раз):\n1. ФИО сотрудника, должность, подразделение/отдел\n2. Дата отсутствия (формат ГГГГ-ММ-ДД)\n3. Когда обнаружено отсутствие (дата обнаружения, формат ГГГГ-ММ-ДД)\n4. Время отсутствия (с ... по ...)\n5. Город и адрес рабочего места, где сотрудник должен был находиться\n6. Удалось ли связаться с сотрудником? Что выяснилось?\n7. Есть ли уважительная причина?\n8. Есть ли доказательства (скрины СКУД, переписка и т.д.)? Можно прислать фото прямо в чат.\n9. ФИО, должность и подразделение/отдел руководителя — он автор служебной записки и составитель акта (если не очевидно)\n10. Свидетели отсутствия. Сначала поясни руководителю, зачем они нужны: «Акт об отсутствии на рабочем месте подписывают свидетели — коллеги, которые подтверждают, что сотрудник действительно не был на месте. Нужны минимум двое. Укажите, пожалуйста, ФИО и должность каждого». Затем собери ФИО и должность ДВУХ свидетелей.\n\n### Шаг 3. Суммаризация\nКратко перескажи собранные данные руководителю для проверки.\n\n### Шаг 4. Проверка по срокам (обязательно, ДО генерации)\nВызови инструмент calc_deadlines, передав даты строкой строго в формате:\n\"violationDate=ГГГГ-ММ-ДД; discoveryDate=ГГГГ-ММ-ДД\"\nИнструмент вернёт JSON: isExpired, expiredReason, violationDeadline, discoveryDeadline.\nНИКОГДА не считай сроки сам — доверяй только числам из инструмента.\n\nДальше действуй СТРОГО так:\n- isExpired = false → ОБЯЗАТЕЛЬНО отправь руководителю отдельным сообщением вердикт:\n  «✅ Срок не истёк, можно привлекать. Крайние сроки: по нарушению — {violationDeadline}, по обнаружению — {discoveryDeadline}.»\n  Затем спроси: «Всё верно? Формирую документы?» и ЗАВЕРШИ свой ход.\n  НЕ вызывай generate_documents в этом же сообщении — дождись ответа руководителя.\n- isExpired = true → НЕ запускай генерацию. Сообщи, что срок истёк (буфер Контура: 5 мес. 15 дн.\n  от нарушения, 20 дн. от обнаружения), и заверши кейс, порекомендовав обратиться к Касмыниной О. или Черепановой Т.\n\n\n### Шаг 5. Генерация документов\nТОЛЬКО после того как руководитель подтвердил («да», «формируй» и т.п.) в ответ на вердикт по срокам — вызови инструмент `generate_documents`, передав JSON:\nВажно!\n\nв scenario передавай \"progul_ochny\" Если ты зафиксировал прогул, и именно очный прогул. Т.е. человек не ходит в офис. Во всех остальных случаях присваивай - \"zaglushka\"\n```\n{\n  \"scenario\": \"progul_ochny\",\n  \"employee\": { \"name\": \"...\", \"position\": \"...\", \"department\": \"...\" },\n  \"manager\": { \"name\": \"...\", \"position\": \"...\", \"department\": \"...\" },\n  \"workplace\": { \"city\": \"...\", \"address\": \"...\" },\n  \"witnesses\": [\n    { \"name\": \"...\", \"position\": \"...\" },\n    { \"name\": \"...\", \"position\": \"...\" }\n  ],\n  \"violation\": { \"date\": \"ГГГГ-ММ-ДД\", \"discoveryDate\": \"ГГГГ-ММ-ДД\", \"absenceStart\": \"ЧЧ:ММ\", \"absenceEnd\": \"ЧЧ:ММ\", \"description\": \"...\" },\n  \"respectableReason\": false,\n  \"respectableReasonComment\": \"\",\n  \"evidenceDescription\": \"...\",\n  \"contactAttempts\": \"...\"\n}\n```\nПоля employee, manager, workplace, violation — объекты; witnesses — массив из двух свидетелей. Передавай ровно то, что собрал у руководителя; ничего не выдумывай.\nГенерация сама пришлёт в чат промежуточные статусы (⏳) и готовые документы.\n\n### Шаг 6. Передача результата\nПокажи сгенерированные документы. Напомни: передать пакет Черепановой Т. или Касмыниной О.\n\n## Важные правила\n- Никогда не цитируй статьи ТК РФ по памяти — только то, что вернул инструмент\n- Не предлагай меры, выходящие за рамки чеклиста\n- Один вопрос за раз — не задавай несколько вопросов в одном сообщении\n- Если чего-то не знаешь — скажи прямо и уточни"
+        }
+      },
+      "id": "45e69cf3-1452-4aba-b41a-5ae77e523898",
+      "name": "HR-ассистент",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.7,
+      "position": [
+        2816,
+        624
+      ]
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "claude-opus-4-8",
+          "mode": "list",
+          "cachedResultName": "Claude Opus 4.8"
+        },
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatAnthropic",
+      "typeVersion": 1.3,
+      "position": [
+        2608,
+        816
+      ],
+      "id": "1eaa294d-b902-4267-8a06-83e71294ed3a",
+      "name": "Anthropic Chat Model",
+      "credentials": {
+        "anthropicApi": {
+          "id": "5kFSALXbGSs7RnI8",
+          "name": "Anthropic account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Формат ответа агента для Telegram (HTML) + разбивка на части ≤4096\nconst chatId = $('Telegram: входящие').item.json.message.chat.id;\nlet t = String($json.output ?? '');\n\n// 1) экранируем HTML-спецсимволы (ДО вставки тегов)\nt = t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');\n\n// 2) markdown → HTML\nt = t.replace(/\\*\\*(.+?)\\*\\*/g, '<b>$1</b>');     // **жирный** → <b>\nt = t.replace(/^#{1,6}\\s*(.+)$/gm, '<b>$1</b>');  // ## Заголовок → жирный\n\n// 3) режем на части ≤4000 по границам строк (теги <b> внутри строки не рвутся)\nconst LIMIT = 4000;\nconst parts = [];\nlet buf = '';\nfor (const line of t.split('\\n')) {\n  if (buf.length + line.length + 1 > LIMIT) {\n    if (buf) parts.push(buf);\n    buf = line;\n    while (buf.length > LIMIT) { parts.push(buf.slice(0, LIMIT)); buf = buf.slice(LIMIT); }\n  } else {\n    buf = buf ? buf + '\\n' + line : line;\n  }\n}\nif (buf) parts.push(buf);\n\n// несколько items → Telegram-нода (per item) отправит каждую часть отдельным сообщением\nreturn parts.map(p => ({ json: { chat_id: chatId, text: p } }));"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3168,
+        496
+      ],
+      "id": "b45844fa-95f1-4850-b09d-bcf50886ab44",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "name": "generate_documents",
+        "description": "Генерирует пакет документов (акт об отсутствии + служебную записку). Сроки ст.193 проверяет инструмент calc_deadlines — вызывай generate_documents ТОЛЬКО после проверки сроков (isExpired=false) и подтверждения руководителем корректности всех данных.",
+        "workflowId": {
+          "__rl": true,
+          "value": "VSXqMIrZYbAFUGYk",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/VSXqMIrZYbAFUGYk",
+          "cachedResultName": "Генерация документов"
+        },
+        "fields": {
+          "values": [
+            {
+              "name": "scenario"
+            },
+            {
+              "name": "employee"
+            },
+            {
+              "name": "manager"
+            },
+            {
+              "name": "workplace"
+            },
+            {
+              "name": "witnesses"
+            },
+            {
+              "name": "violation"
+            },
+            {
+              "name": "respectableReason"
+            },
+            {
+              "name": "respectableReasonComment"
+            },
+            {
+              "name": "evidenceDescription"
+            },
+            {
+              "name": "contactAttempts"
+            },
+            {
+              "name": "chat_id",
+              "stringValue": "={{ $('Telegram: входящие').item.json.message.chat.id }}"
+            }
+          ]
+        }
+      },
+      "id": "96b7035d-9af6-475f-a322-fc17832298ca",
+      "name": "Генерация документов",
+      "type": "@n8n/n8n-nodes-langchain.toolWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        3168,
+        800
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "file",
+        "fileId": "={{ $('Нормализация входа TG').first().json.evidence.file_id }}",
+        "additionalFields": {}
+      },
+      "id": "e1842088-abe8-4766-b664-4d24d4b5aff5",
+      "name": "Telegram: скачать фото",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        2272,
+        432
+      ],
+      "webhookId": "e9febf60-8646-40b0-920c-516d71aa7244",
+      "credentials": {
+        "telegramApi": {
+          "id": "aESJLABaZl21D7lx",
+          "name": "hr_assistant_kontur_bot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const prev = $('Нормализация входа TG').first().json;\nconst buf = await this.helpers.getBinaryDataBuffer(0, 'data');\nreturn [{ json: {\n  chat_id: prev.chat_id,\n  file_id: prev.evidence.file_id,\n  file_size: prev.evidence.file_size,\n  downloaded: true,\n  note: 'telegram photo',\n  file_b64: buf.toString('base64'),\n  normalized_text: prev.normalized_text\n} }];"
+      },
+      "id": "57a5762c-f04c-42cb-bd40-49cbc89c1777",
+      "name": "Кодировать фото (base64)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2448,
+        432
       ]
     },
     {
@@ -87,10 +313,11 @@
           "mappingMode": "defineBelow",
           "value": {
             "chat_id": "={{ $json.chat_id }}",
-            "file_id": "={{ $json.evidence.file_id }}",
-            "file_size": "={{ $json.evidence.file_size }}",
-            "downloaded": "={{ $json.evidence.downloaded }}",
-            "note": "telegram photo"
+            "file_id": "={{ $json.file_id }}",
+            "file_size": "={{ $json.file_size }}",
+            "downloaded": "={{ $json.downloaded }}",
+            "note": "={{ $json.note }}",
+            "file_b64": "={{ $json.file_b64 }}"
           },
           "matchingColumns": [
             "id"
@@ -160,6 +387,15 @@
               "display": true,
               "type": "string",
               "canBeUsedToMatch": true
+            },
+            {
+              "id": "file_b64",
+              "displayName": "file_b64",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
             }
           ],
           "attemptToConvertTypes": false,
@@ -167,229 +403,18 @@
         },
         "options": {}
       },
-      "id": "a9c4fcbb-7e59-4a10-b5d0-1ae4cbc45969",
+      "id": "0c3fd1a3-4feb-42c5-af78-05cb45616043",
       "name": "Postgres: запись доказательства",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.6,
       "position": [
-        2400,
-        480
+        2640,
+        432
       ],
       "credentials": {
         "postgres": {
           "id": "Fvszl2WiBUELNhgw",
           "name": "hr_assistant_psql"
-        }
-      }
-    },
-    {
-      "parameters": {
-        "chatId": "={{ $json.chat_id }}",
-        "text": "=={{ $json.text }}",
-        "additionalFields": {
-          "appendAttribution": false,
-          "parse_mode": "HTML"
-        }
-      },
-      "id": "c349aaf7-f188-47be-b81e-f187051b3d79",
-      "name": "Telegram: ответ",
-      "type": "n8n-nodes-base.telegram",
-      "typeVersion": 1.2,
-      "position": [
-        3088,
-        624
-      ],
-      "webhookId": "hr-agent-telegram-out-v6",
-      "credentials": {
-        "telegramApi": {
-          "id": "aESJLABaZl21D7lx",
-          "name": "hr_assistant_kontur_bot"
-        }
-      }
-    },
-    {
-      "parameters": {
-        "sessionIdType": "customKey",
-        "sessionKey": "={{ $('Telegram: входящие').item.json.message.chat.id }}",
-        "contextWindowLength": 30
-      },
-      "id": "ceb80863-2f00-4d5c-9113-a06b53a331ca",
-      "name": "Postgres память",
-      "type": "@n8n/n8n-nodes-langchain.memoryPostgresChat",
-      "typeVersion": 1.3,
-      "position": [
-        2576,
-        848
-      ],
-      "credentials": {
-        "postgres": {
-          "id": "Fvszl2WiBUELNhgw",
-          "name": "hr_assistant_psql"
-        }
-      }
-    },
-    {
-      "parameters": {
-        "content": "## HR-агент v6 (Telegram + Postgres)\n\n**Точка входа — Telegram-бот.** Агент ведёт диалог с руководителем, собирает данные, проверяет сроки и вызывает генерацию.\n\n**Вход:** Telegram Trigger → Нормализация (text/photo + валидация фото) → агент.\n**Выход:** агент → Telegram: ответ.\n**Память:** Postgres Chat Memory (sessionKey = chat_id).\n\n**Инструменты:**\n- calc_deadlines (Code Tool) — проверка сроков ст.193 ДО генерации\n- generate_documents → Генерация документов: акт + служебная записка",
-        "height": 520,
-        "width": 900,
-        "color": 4
-      },
-      "id": "aef6e9c2-4de9-4af3-a2eb-ed3b60d5b026",
-      "name": "📌 HR-агент — точка входа1",
-      "type": "n8n-nodes-base.stickyNote",
-      "typeVersion": 1,
-      "position": [
-        1200,
-        -32
-      ]
-    },
-    {
-      "parameters": {
-        "name": "calc_deadlines",
-        "description": "Рассчитывает крайние сроки привлечения к дисциплинарной ответственности и определяет, истёк ли срок. Вход — строка с датами в формате ГГГГ-ММ-ДД (сначала дата нарушения, затем дата обнаружения). Возвращает JSON: isExpired, expiredReason, violationDeadline, discoveryDeadline.",
-        "jsCode": "// query — строка от агента, напр.: \"violationDate=2026-01-15; discoveryDate=2026-01-20\"\n// Сроки — внутренний буфер Контура (НЕ дословно ТК РФ):\n//   нарушение: +5 мес 15 дн;  обнаружение: +20 дн.\n// ТК РФ baseline: 6 мес / 30 дн. Уточнять у Касмыниной О.\nconst text = String(query || '');\nconst dates = text.match(/\\d{4}-\\d{2}-\\d{2}/g) || [];\nconst violationStr = dates[0];\nconst discoveryStr = dates[1] || dates[0];\nif (!violationStr) {\n  return JSON.stringify({ error: 'Не нашёл дат в формате ГГГГ-ММ-ДД', received: text });\n}\nconst now = new Date();\nconst violationDate = new Date(violationStr);\nconst discoveryDate = new Date(discoveryStr);\nconst vDeadline = new Date(violationDate);\nvDeadline.setMonth(vDeadline.getMonth() + 5);\nvDeadline.setDate(vDeadline.getDate() + 15);\nconst dDeadline = new Date(discoveryDate);\ndDeadline.setDate(dDeadline.getDate() + 20);\nconst expiredByViolation = now >= vDeadline;\nconst expiredByDiscovery = now >= dDeadline;\nconst fmt = (d) => d.toISOString().split('T')[0];\nreturn JSON.stringify({\n  isExpired: expiredByViolation || expiredByDiscovery,\n  expiredReason: expiredByViolation ? 'violation_date' : (expiredByDiscovery ? 'discovery_date' : null),\n  violationDeadline: fmt(vDeadline),\n  discoveryDeadline: fmt(dDeadline),\n  today: fmt(now)\n});\n"
-      },
-      "type": "@n8n/n8n-nodes-langchain.toolCode",
-      "typeVersion": 1,
-      "position": [
-        2784,
-        1024
-      ],
-      "id": "2974c597-a4df-431b-a652-08194e0c8d19",
-      "name": "Рассчитать сроки ст.1"
-    },
-    {
-      "parameters": {
-        "promptType": "define",
-        "text": "={{ $('Нормализация входа TG').item.json.normalized_text }}",
-        "options": {
-          "systemMessage": "Ты — HR-ассистент для руководителей компании Контур. Помогаешь оформить дисциплинарные документы: акт об отсутствии и служебную записку.\n\n\n\n## Твоя роль\n- Задаёшь вопросы и собираешь факты — не додумываешь ничего сам. Либо додумываешь, но совсем немного, например помогаешь доофорить просто дату в нужный формат\n- Работаешь строго в рамках предоставленных данных\n- Граница: до передачи документов кадровому эксперту включительно\n- Если ситуация нестандартная — направляй к Касмыниной О. или Черепановой Т.\n\n## Интерфейс\nТы общаешься с руководителем в Telegram. Сообщения о доказательствах в квадратных скобках вида\n«[Доказательство-фото получено...]» — это служебные маркеры от системы, НЕ текст руководителя:\nвоспринимай их как факт о приложенном файле и продолжай диалог по алгоритму.\n\n## Алгоритм работы\n\n### Шаг 1. Приветствие и выяснение ситуации\nПоздоровайся и попроси описать ситуацию.\n\n### Шаг 2. Сбор данных о нарушении\nПоследовательно уточни (по одному вопросу за раз):\n1. ФИО сотрудника, должность, подразделение/отдел\n2. Дата отсутствия (формат ГГГГ-ММ-ДД)\n3. Когда обнаружено отсутствие (дата обнаружения, формат ГГГГ-ММ-ДД)\n4. Время отсутствия (с ... по ...)\n5. Город и адрес рабочего места, где сотрудник должен был находиться\n6. Удалось ли связаться с сотрудником? Что выяснилось?\n7. Есть ли уважительная причина?\n8. Есть ли доказательства (скрины СКУД, переписка и т.д.)? Можно прислать фото прямо в чат.\n9. ФИО, должность и подразделение/отдел руководителя — он автор служебной записки и составитель акта (если не очевидно)\n10. Свидетели отсутствия. Сначала поясни руководителю, зачем они нужны: «Акт об отсутствии на рабочем месте подписывают свидетели — коллеги, которые подтверждают, что сотрудник действительно не был на месте. Нужны минимум двое. Укажите, пожалуйста, ФИО и должность каждого». Затем собери ФИО и должность ДВУХ свидетелей.\n\n### Шаг 3. Суммаризация\nКратко перескажи собранные данные руководителю для проверки.\n\n### Шаг 4. Проверка по срокам (обязательно, ДО генерации)\nВызови инструмент calc_deadlines, передав даты строкой строго в формате:\n\"violationDate=ГГГГ-ММ-ДД; discoveryDate=ГГГГ-ММ-ДД\"\nИнструмент вернёт JSON: isExpired, expiredReason, violationDeadline, discoveryDeadline.\nНИКОГДА не считай сроки сам — доверяй только числам из инструмента.\n\nДальше действуй СТРОГО так:\n- isExpired = false → ОБЯЗАТЕЛЬНО отправь руководителю отдельным сообщением вердикт:\n  «✅ Срок не истёк, можно привлекать. Крайние сроки: по нарушению — {violationDeadline}, по обнаружению — {discoveryDeadline}.»\n  Затем спроси: «Всё верно? Формирую документы?» и ЗАВЕРШИ свой ход.\n  НЕ вызывай generate_documents в этом же сообщении — дождись ответа руководителя.\n- isExpired = true → НЕ запускай генерацию. Сообщи, что срок истёк (буфер Контура: 5 мес. 15 дн.\n  от нарушения, 20 дн. от обнаружения), и заверши кейс, порекомендовав обратиться к Касмыниной О. или Черепановой Т.\n\n\n### Шаг 5. Генерация документов\nТОЛЬКО после того как руководитель подтвердил («да», «формируй» и т.п.) в ответ на вердикт по срокам — вызови инструмент `generate_documents`, передав JSON:\nВажно!\n\nв scenario передавай \"progul_ochny\" Если ты зафиксировал прогул, и именно очный прогул. Т.е. человек не ходит в офис. Во всех остальных случаях присваивай - \"zaglushka\"\n```\n{\n  \"scenario\": \"progul_ochny\",\n  \"employee\": { \"name\": \"...\", \"position\": \"...\", \"department\": \"...\" },\n  \"manager\": { \"name\": \"...\", \"position\": \"...\", \"department\": \"...\" },\n  \"workplace\": { \"city\": \"...\", \"address\": \"...\" },\n  \"witnesses\": [\n    { \"name\": \"...\", \"position\": \"...\" },\n    { \"name\": \"...\", \"position\": \"...\" }\n  ],\n  \"violation\": { \"date\": \"ГГГГ-ММ-ДД\", \"discoveryDate\": \"ГГГГ-ММ-ДД\", \"absenceStart\": \"ЧЧ:ММ\", \"absenceEnd\": \"ЧЧ:ММ\", \"description\": \"...\" },\n  \"respectableReason\": false,\n  \"respectableReasonComment\": \"\",\n  \"evidenceDescription\": \"...\",\n  \"contactAttempts\": \"...\"\n}\n```\nПоля employee, manager, workplace, violation — объекты; witnesses — массив из двух свидетелей. Передавай ровно то, что собрал у руководителя; ничего не выдумывай.\nГенерация сама пришлёт в чат промежуточные статусы (⏳) и готовые документы.\n\n### Шаг 6. Передача результата\nПокажи сгенерированные документы. Напомни: передать пакет Черепановой Т. или Касмыниной О.\n\n## Важные правила\n- Никогда не цитируй статьи ТК РФ по памяти — только то, что вернул инструмент\n- Не предлагай меры, выходящие за рамки чеклиста\n- Один вопрос за раз — не задавай несколько вопросов в одном сообщении\n- Если чего-то не знаешь — скажи прямо и уточни"
-        }
-      },
-      "id": "45e69cf3-1452-4aba-b41a-5ae77e523898",
-      "name": "HR-ассистент",
-      "type": "@n8n/n8n-nodes-langchain.agent",
-      "typeVersion": 1.7,
-      "position": [
-        2576,
-        624
-      ]
-    },
-    {
-      "parameters": {
-        "model": {
-          "__rl": true,
-          "value": "claude-opus-4-8",
-          "mode": "list",
-          "cachedResultName": "Claude Opus 4.8"
-        },
-        "options": {}
-      },
-      "type": "@n8n/n8n-nodes-langchain.lmChatAnthropic",
-      "typeVersion": 1.3,
-      "position": [
-        2176,
-        848
-      ],
-      "id": "1eaa294d-b902-4267-8a06-83e71294ed3a",
-      "name": "Anthropic Chat Model",
-      "credentials": {
-        "anthropicApi": {
-          "id": "5kFSALXbGSs7RnI8",
-          "name": "Anthropic account"
-        }
-      }
-    },
-    {
-      "parameters": {
-        "jsCode": "// Формат ответа агента для Telegram (HTML) + разбивка на части ≤4096\nconst chatId = $('Telegram: входящие').item.json.message.chat.id;\nlet t = String($json.output ?? '');\n\n// 1) экранируем HTML-спецсимволы (ДО вставки тегов)\nt = t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');\n\n// 2) markdown → HTML\nt = t.replace(/\\*\\*(.+?)\\*\\*/g, '<b>$1</b>');     // **жирный** → <b>\nt = t.replace(/^#{1,6}\\s*(.+)$/gm, '<b>$1</b>');  // ## Заголовок → жирный\n\n// 3) режем на части ≤4000 по границам строк (теги <b> внутри строки не рвутся)\nconst LIMIT = 4000;\nconst parts = [];\nlet buf = '';\nfor (const line of t.split('\\n')) {\n  if (buf.length + line.length + 1 > LIMIT) {\n    if (buf) parts.push(buf);\n    buf = line;\n    while (buf.length > LIMIT) { parts.push(buf.slice(0, LIMIT)); buf = buf.slice(LIMIT); }\n  } else {\n    buf = buf ? buf + '\\n' + line : line;\n  }\n}\nif (buf) parts.push(buf);\n\n// несколько items → Telegram-нода (per item) отправит каждую часть отдельным сообщением\nreturn parts.map(p => ({ json: { chat_id: chatId, text: p } }));"
-      },
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        2928,
-        496
-      ],
-      "id": "b45844fa-95f1-4850-b09d-bcf50886ab44",
-      "name": "Code in JavaScript"
-    },
-    {
-      "parameters": {
-        "name": "generate_documents",
-        "description": "Генерирует пакет документов (акт об отсутствии + служебную записку). Сроки ст.193 проверяет инструмент calc_deadlines — вызывай generate_documents ТОЛЬКО после проверки сроков (isExpired=false) и подтверждения руководителем корректности всех данных.",
-        "workflowId": {
-          "__rl": true,
-          "value": "VSXqMIrZYbAFUGYk",
-          "mode": "list",
-          "cachedResultUrl": "/workflow/VSXqMIrZYbAFUGYk",
-          "cachedResultName": "Генерация документов"
-        },
-        "fields": {
-          "values": [
-            {
-              "name": "scenario"
-            },
-            {
-              "name": "employee"
-            },
-            {
-              "name": "manager"
-            },
-            {
-              "name": "workplace"
-            },
-            {
-              "name": "witnesses"
-            },
-            {
-              "name": "violation"
-            },
-            {
-              "name": "respectableReason"
-            },
-            {
-              "name": "respectableReasonComment"
-            },
-            {
-              "name": "evidenceDescription"
-            },
-            {
-              "name": "contactAttempts"
-            },
-            {
-              "name": "chat_id",
-              "stringValue": "={{ $('Telegram: входящие').item.json.message.chat.id }}"
-            }
-          ]
-        }
-      },
-      "id": "96b7035d-9af6-475f-a322-fc17832298ca",
-      "name": "Генерация документов",
-      "type": "@n8n/n8n-nodes-langchain.toolWorkflow",
-      "typeVersion": 1.3,
-      "position": [
-        2880,
-        784
-      ]
-    },
-    {
-      "parameters": {
-        "model": "qwen2.5:7b",
-        "options": {}
-      },
-      "type": "@n8n/n8n-nodes-langchain.lmChatOllama",
-      "typeVersion": 1,
-      "position": [
-        2352,
-        832
-      ],
-      "id": "9a898762-23f0-4234-b3b3-148a2d994a80",
-      "name": "Ollama Chat Model",
-      "credentials": {
-        "ollamaApi": {
-          "id": "xDjnxIMsBOmeTM6M",
-          "name": "Ollama account"
         }
       }
     }
@@ -422,22 +447,11 @@
       "main": [
         [
           {
-            "node": "Postgres: запись доказательства",
+            "node": "Telegram: скачать фото",
             "type": "main",
             "index": 0
           }
         ],
-        [
-          {
-            "node": "HR-ассистент",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Postgres: запись доказательства": {
-      "main": [
         [
           {
             "node": "HR-ассистент",
@@ -482,7 +496,13 @@
     },
     "Anthropic Chat Model": {
       "ai_languageModel": [
-        []
+        [
+          {
+            "node": "HR-ассистент",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
       ]
     },
     "Code in JavaScript": {
@@ -507,12 +527,34 @@
         ]
       ]
     },
-    "Ollama Chat Model": {
-      "ai_languageModel": [
+    "Telegram: скачать фото": {
+      "main": [
+        [
+          {
+            "node": "Кодировать фото (base64)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Кодировать фото (base64)": {
+      "main": [
+        [
+          {
+            "node": "Postgres: запись доказательства",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Postgres: запись доказательства": {
+      "main": [
         [
           {
             "node": "HR-ассистент",
-            "type": "ai_languageModel",
+            "type": "main",
             "index": 0
           }
         ]
@@ -525,7 +567,7 @@
     "binaryMode": "separate",
     "availableInMCP": false
   },
-  "versionId": "165abebe-1d14-4857-9a2a-01983866ab5f",
+  "versionId": "4139c77e-3739-4032-8638-f2b8c71aa485",
   "meta": {
     "templateCredsSetupCompleted": true,
     "instanceId": "9a987c8c5e53be071f8410e33526cc5ade2a52fb0a040cf9a29e79d0943782f4"

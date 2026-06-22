@@ -14,3 +14,7 @@ tmp/
 *.log
 .claude/worktrees/
 n8n/temp/
+
+# секреты окружения (деплой)
+.env
+deploy/.env

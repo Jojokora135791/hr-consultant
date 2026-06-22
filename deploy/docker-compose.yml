@@ -1,0 +1,61 @@
+# HR-консультант — прод-стек (Timeweb VPS)
+# n8n (SQLite для своих данных) + Postgres (бизнес-БД hr_assistant) + Caddy (авто-HTTPS).
+# Ollama НЕ нужна: диалог на Claude (облако), генерация детерминированная (petrovich/fallback).
+
+services:
+  postgres:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: hr_assistant
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+      # схема hr_cases/hr_evidence применяется автоматически при первой инициализации БД
+      - ../db/schema.sql:/docker-entrypoint-initdb.d/schema.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d hr_assistant"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  n8n:
+    build: .
+    restart: unless-stopped
+    environment:
+      # n8n хранит свои workflow/credentials в SQLite (том n8n_data) — как локально
+      N8N_HOST: ${DOMAIN}
+      N8N_PROTOCOL: https
+      N8N_PORT: 5678
+      WEBHOOK_URL: https://${DOMAIN}/
+      N8N_EDITOR_BASE_URL: https://${DOMAIN}/
+      GENERIC_TIMEZONE: ${TZ}
+      NODE_FUNCTION_ALLOW_EXTERNAL: adm-zip,petrovich
+      N8N_PROXY_HOPS: "1"            # n8n за Caddy
+    volumes:
+      - n8n_data:/home/node/.n8n
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      DOMAIN: ${DOMAIN}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - n8n
+
+volumes:
+  pg_data:
+  n8n_data:
+  caddy_data:
+  caddy_config:

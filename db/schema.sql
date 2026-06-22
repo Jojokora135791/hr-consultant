@@ -34,7 +34,8 @@ CREATE TABLE IF NOT EXISTS hr_evidence (
     file_id     TEXT,                  -- Telegram file_id
     file_size   BIGINT,                -- размер файла (байт); >0 = валиден
     downloaded  BOOLEAN DEFAULT FALSE, -- удалось ли реально скачать
-    note        TEXT                   -- комментарий/тип доказательства
+    note        TEXT,                  -- комментарий/тип доказательства
+    file_b64    TEXT                   -- сами байты фото в base64 (для вставки в .docx)
 );
 
 CREATE INDEX IF NOT EXISTS idx_hr_evidence_chat_id ON hr_evidence (chat_id);
