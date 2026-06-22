@@ -3,6 +3,26 @@
 Стек: **n8n** (свои данные в SQLite) + **Postgres 16** (бизнес-БД `hr_assistant`) + **Caddy** (авто-HTTPS).
 Ollama и GPU не нужны: диалог — Claude (облако), генерация — детерминированная (petrovich/fallback).
 
+## Быстрый старт (one-liner)
+
+Выполнить **на сервере** — по SSH или через **веб-консоль Timeweb** (панель VPS → «Консоль»):
+
+```bash
+DOMAIN=hr-kontur.ru POSTGRES_PASSWORD=ВАШ_ПАРОЛЬ \
+  bash <(curl -fsSL https://raw.githubusercontent.com/Jojokora135791/hr-consultant/main/deploy/bootstrap.sh)
+```
+Скрипт сам поставит Docker, склонирует репо, создаст `.env`, соберёт и поднимет стек.
+Дальше — credentials и импорт workflow в n8n UI (шаги 5–6 ниже).
+
+> ⚠️ **SSH с зарубежной сети может виснуть на «banner exchange»** — это MTU black hole на пути
+> (мелкие пакеты идут, крупные key-exchange дропаются). Лечение: либо деплой через **веб-консоль
+> Timeweb** (в обход), либо снизить MTU на клиенте (`sudo ifconfig <iface> mtu 1300`) / включить
+> TCP MSS-clamp на роутере. Сам сервер при этом жив (ICMP отвечает).
+
+---
+
+## Ручной путь (по шагам)
+
 ## 0. Предусловия
 - VPS (Ubuntu 22/24), 2 vCPU / 2–4 ГБ. Без GPU.
 - Домен/поддомен с **A-записью на IP VPS** (напр. `hr-kontur.xyz` или бесплатный `*.duckdns.org`).
