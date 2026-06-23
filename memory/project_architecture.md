@@ -1,11 +1,21 @@
 ---
 name: project-architecture
-description: "Архитектура n8n workflow v6 (Telegram-бот + Claude Opus 4.8 диалог + Ollama генерация + рендер .docx из Google Drive + Postgres память/кейсы), calc_deadlines прямой тул, саб-агент убран"
+description: "Архитектура n8n workflow v7 (Telegram + Claude диалог + детерминированная генерация .docx БЕЗ Ollama + Postgres + скриншоты в СЗ); актуальный источник правды — CLAUDE.md. Текст ниже — история v6"
 metadata:
   type: project
 ---
 
-## Инфраструктура (всё локально, macOS M3)
+> ⚠️ **АКТУАЛЬНО v7 (источник правды — `CLAUDE.md`).** Что изменилось от v6 ниже:
+> - **Генерация без Ollama** — склонение ФИО через `petrovich` (+JS-fallback), обстоятельства/
+>   приложения — склейка кодом. Островок нарушений (Ollama) выключен (`disabled`, задел под RAG).
+> - Диалог — только Claude (нода `Ollama Chat Model` удалена).
+> - **Скриншоты в СЗ:** фото → `hr_evidence.file_b64` → вставка в .docx (OOXML, «Скриншот N»).
+> - **Прод:** Docker (n8n+Postgres+Caddy) на Timeweb VPS в **Нидерландах**, домен hr-kontur.ru.
+>   Anthropic блочит РФ-IP → НЕ в РФ. См. [[deploy-prod-netherlands]].
+> - n8n запуск: `NODE_FUNCTION_ALLOW_EXTERNAL=adm-zip,petrovich`.
+> - Postgres `chat_id = $1::text` (колонка TEXT, из n8n — число).
+
+## Инфраструктура v6 (локально, macOS M3) — историческая, см. CLAUDE.md для прод
 
 | Сервис | Команда | Статус |
 |--------|---------|--------|
