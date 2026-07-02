@@ -3,38 +3,15 @@
   "nodes": [
     {
       "parameters": {
-        "updates": [
-          "message"
-        ],
-        "additionalFields": {}
+        "jsCode": "// Нормализация входа из Mattermost (коннектор/бот → webhook).\n// Тело вебхука: { channel_id, user_id, sender_name, message, file_ids }\nconst root = $input.first().json;\nconst b = root.body || root;\nconst channelId = b.channel_id || '';\nconst userId = b.user_id || '';\nconst senderName = b.sender_name || '';\nconst text = (b.message == null ? '' : String(b.message));\nconst fileIds = Array.isArray(b.file_ids) ? b.file_ids : [];\n\n// Фото пока НЕ обрабатываем (отложено). Фиксируем факт вложения текстовым маркером.\nlet normalized_text = text;\nif (!text && fileIds.length) {\n  normalized_text = '[Пользователь прислал вложение без текста — разбор фото пока не поддержан, попроси описать доказательство текстом]';\n} else if (!text) {\n  normalized_text = '[Получено пустое сообщение — попроси повторить текстом]';\n}\n\nreturn [{ json: {\n  chat_id: channelId,        // = channel_id (downstream ждёт chat_id)\n  channel_id: channelId,\n  user_id: userId,\n  sender_name: senderName,\n  normalized_text,\n  file_ids: fileIds\n} }];\n"
       },
-      "id": "0c1e88f2-d715-4bcf-a06f-0f695a864e7c",
-      "name": "Telegram: входящие",
-      "type": "n8n-nodes-base.telegramTrigger",
-      "typeVersion": 1.2,
-      "position": [
-        1632,
-        624
-      ],
-      "webhookId": "hr-agent-telegram-v6",
-      "credentials": {
-        "telegramApi": {
-          "id": "aESJLABaZl21D7lx",
-          "name": "hr_assistant_kontur_bot"
-        }
-      }
-    },
-    {
-      "parameters": {
-        "jsCode": "// Нормализация входа Telegram: текст или фото-доказательство.\n// Валидация: фото считается принятым, если Telegram прислал file_size > 0\n// (файл уже принят на серверы Telegram). Реальное скачивание байтов — позже, для Vision.\nconst msg = $input.first().json.message || {};\nconst chatId = msg.chat && msg.chat.id;\nlet normalized_text = '';\nlet evidence = { has_photo: false, file_id: null, file_size: 0, downloaded: false };\n\nif (Array.isArray(msg.photo) && msg.photo.length) {\n  const p = msg.photo[msg.photo.length - 1]; // последний = наибольшее разрешение\n  const size = p.file_size || 0;\n  evidence = { has_photo: true, file_id: p.file_id, file_size: size, downloaded: size > 0 };\n  if (size > 0) {\n    const cap = msg.caption ? ` Подпись: ${msg.caption}` : '';\n    normalized_text = `[Доказательство-фото получено и принято, file_id=${p.file_id}, размер ${size} байт — OK.${cap}]`;\n  } else {\n    normalized_text = '[Фото НЕ удалось принять — попроси прислать заново или описать доказательство текстом]';\n  }\n} else if (msg.text) {\n  normalized_text = msg.text;\n} else if (msg.caption) {\n  normalized_text = msg.caption;\n} else {\n  normalized_text = '[Получено сообщение без текста — попроси повторить текстом]';\n}\n\nreturn [{ json: { chat_id: chatId, normalized_text, evidence, _raw: msg } }];\n"
-      },
-      "id": "8d1d5043-43e2-4865-ae03-a4d1c58fd0a8",
+      "id": "322df00d-cce7-4f66-9797-7ee0898eb507",
       "name": "Нормализация входа TG",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1856,
-        624
+        656,
+        656
       ]
     },
     {
@@ -62,90 +39,66 @@
         },
         "options": {}
       },
-      "id": "fca848da-8b64-4814-8bab-60d2dc664f05",
+      "id": "05749ebc-4315-414c-afee-8051a0c00c47",
       "name": "Есть фото?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
       "position": [
-        2080,
-        624
-      ]
-    },
-    {
-      "parameters": {
-        "chatId": "={{ $json.chat_id }}",
-        "text": "=={{ $json.text }}",
-        "additionalFields": {
-          "appendAttribution": false,
-          "parse_mode": "HTML"
-        }
-      },
-      "id": "c349aaf7-f188-47be-b81e-f187051b3d79",
-      "name": "Telegram: ответ",
-      "type": "n8n-nodes-base.telegram",
-      "typeVersion": 1.2,
-      "position": [
-        3328,
-        624
+        880,
+        656
       ],
-      "webhookId": "hr-agent-telegram-out-v6",
-      "credentials": {
-        "telegramApi": {
-          "id": "aESJLABaZl21D7lx",
-          "name": "hr_assistant_kontur_bot"
-        }
-      }
+      "disabled": true
     },
     {
       "parameters": {
         "sessionIdType": "customKey",
-        "sessionKey": "={{ $('Telegram: входящие').item.json.message.chat.id }}",
+        "sessionKey": "={{ $('Нормализация входа TG').first().json.chat_id }}",
         "contextWindowLength": 30
       },
-      "id": "ceb80863-2f00-4d5c-9113-a06b53a331ca",
+      "id": "de66ec04-03e6-400f-a013-445b9f5524bf",
       "name": "Postgres память",
       "type": "@n8n/n8n-nodes-langchain.memoryPostgresChat",
       "typeVersion": 1.3,
       "position": [
-        2816,
-        848
+        1616,
+        880
       ],
       "credentials": {
         "postgres": {
-          "id": "Fvszl2WiBUELNhgw",
-          "name": "hr_assistant_psql"
+          "id": "31G0c3e8sLXWZIif",
+          "name": "n8n_hr_disciplinary_assistant"
         }
       }
     },
     {
       "parameters": {
-        "content": "## HR-агент v6 (Telegram + Postgres)\n\n**Точка входа — Telegram-бот.** Агент ведёт диалог с руководителем, собирает данные, проверяет сроки и вызывает генерацию.\n\n**Вход:** Telegram Trigger → Нормализация (text/photo + валидация фото) → агент.\n**Выход:** агент → Telegram: ответ.\n**Память:** Postgres Chat Memory (sessionKey = chat_id).\n\n**Инструменты:**\n- calc_deadlines (Code Tool) — проверка сроков ст.193 ДО генерации\n- generate_documents → Генерация документов: акт + служебная записка",
+        "content": "## HR-агент v7 (Mattermost + Postgres)\n\n**Точка входа — Mattermost** (коннектор/бот → Webhook `/mattermost-in`).\n\n**Вход:** Webhook → Нормализация (MM: channel_id/message) → агент.\n**Выход:** агент → Формат ответа → Отправить сообщение (POST /api/v4/posts).\n**Память:** Postgres Chat Memory (sessionKey = channel_id).\n\n**Инструменты:**\n- calc_deadlines — относительные даты + проверка сроков ст.193\n- Идентификация пользователя — данные из Staff по email/логину\n- generate_documents → Генерация документов: акт + служебная записка",
         "height": 520,
         "width": 900,
         "color": 4
       },
-      "id": "aef6e9c2-4de9-4af3-a2eb-ed3b60d5b026",
+      "id": "7ea0e9ff-30fa-4c12-bbbc-a89102762535",
       "name": "📌 HR-агент — точка входа1",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "position": [
-        1200,
-        -32
+        0,
+        0
       ]
     },
     {
       "parameters": {
         "name": "calc_deadlines",
-        "description": "Рассчитывает крайние сроки привлечения к дисциплинарной ответственности и определяет, истёк ли срок. Вход — строка с датами в формате ГГГГ-ММ-ДД (сначала дата нарушения, затем дата обнаружения). Возвращает JSON: isExpired, expiredReason, violationDeadline, discoveryDeadline.",
-        "jsCode": "// query — строка от агента, напр.: \"violationDate=2026-01-15; discoveryDate=2026-01-20\"\n// Сроки — внутренний буфер Контура (НЕ дословно ТК РФ):\n//   нарушение: +5 мес 15 дн;  обнаружение: +20 дн.\n// ТК РФ baseline: 6 мес / 30 дн. Уточнять у Касмыниной О.\nconst text = String(query || '');\nconst dates = text.match(/\\d{4}-\\d{2}-\\d{2}/g) || [];\nconst violationStr = dates[0];\nconst discoveryStr = dates[1] || dates[0];\nif (!violationStr) {\n  return JSON.stringify({ error: 'Не нашёл дат в формате ГГГГ-ММ-ДД', received: text });\n}\nconst now = new Date();\nconst violationDate = new Date(violationStr);\nconst discoveryDate = new Date(discoveryStr);\nconst vDeadline = new Date(violationDate);\nvDeadline.setMonth(vDeadline.getMonth() + 5);\nvDeadline.setDate(vDeadline.getDate() + 15);\nconst dDeadline = new Date(discoveryDate);\ndDeadline.setDate(dDeadline.getDate() + 20);\nconst expiredByViolation = now >= vDeadline;\nconst expiredByDiscovery = now >= dDeadline;\nconst fmt = (d) => d.toISOString().split('T')[0];\nreturn JSON.stringify({\n  isExpired: expiredByViolation || expiredByDiscovery,\n  expiredReason: expiredByViolation ? 'violation_date' : (expiredByDiscovery ? 'discovery_date' : null),\n  violationDeadline: fmt(vDeadline),\n  discoveryDeadline: fmt(dDeadline),\n  today: fmt(now)\n});\n"
+        "description": "Единый инструмент дат: (1) превращает относительные даты «сегодня/вчера/позавчера/завтра/послезавтра/N дней назад» в конкретную дату от серверного «сегодня», (2) рассчитывает крайние сроки привлечения по ст.193 и определяет, истёк ли срок. Вход — строка с датой нарушения и датой обнаружения (можно словами или ГГГГ-ММ-ДД/ДД.ММ.ГГГГ), напр.: \"violationDate=вчера; discoveryDate=сегодня\". Возвращает JSON: violationDate, discoveryDate, isExpired, expiredReason, violationDeadline, discoveryDeadline, today. НИКОГДА не считай даты сам.",
+        "jsCode": "// Единый инструмент дат: резолвит относительные даты И считает сроки ст.193.\n// Вход query: даты в ГГГГ-ММ-ДД или ДД.ММ.ГГГГ, либо слова\n// \"сегодня/вчера/позавчера/завтра/послезавтра/N дней назад/через N дней\".\n// Ярлыки (необязательны): \"violationDate=...; discoveryDate=...\" (сначала нарушение).\n// Сроки — буфер Контура (НЕ дословно ТК): нарушение +5 мес 15 дн; обнаружение +20 дн.\nconst text = String(query || '').toLowerCase();\nconst now = new Date();\nconst server = new Date(now.getFullYear(), now.getMonth(), now.getDate()); // локальная полночь\nconst pad = n => String(n).padStart(2,'0');\nconst fmt = d => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;\nconst addDays = (d,n) => { const x=new Date(d); x.setDate(x.getDate()+n); return x; };\n\nfunction resolveOne(s){\n  if(!s) return null;\n  s = String(s).trim().toLowerCase();\n  if(!s) return null;\n  let m = s.match(/(\\d{4})-(\\d{2})-(\\d{2})/);      if(m) return new Date(+m[1], +m[2]-1, +m[3]);\n  m = s.match(/(\\d{1,2})\\.(\\d{1,2})\\.(\\d{4})/);     if(m) return new Date(+m[3], +m[2]-1, +m[1]);\n  if(/позавчера/.test(s)) return addDays(server,-2);\n  if(/послезавтра/.test(s)) return addDays(server,2);\n  if(/вчера/.test(s)) return addDays(server,-1);\n  if(/(сегодня|сейчас|нынче|today)/.test(s)) return new Date(server);\n  if(/завтра/.test(s)) return addDays(server,1);\n  m = s.match(/(\\d+)\\s*дн[а-яё]*\\s*назад/);            if(m) return addDays(server,-(+m[1]));\n  m = s.match(/через\\s*(\\d+)\\s*дн/);               if(m) return addDays(server,+(+m[1]));\n  return null;\n}\nfunction pick(label){\n  const m = text.match(new RegExp(label+'\\\\s*=\\\\s*([^;]+)','i'));\n  return m ? resolveOne(m[1]) : null;\n}\n\nlet violationDate = pick('violationdate');\nlet discoveryDate = pick('discoverydate');\nif(!violationDate || !discoveryDate){\n  const toks = text.split(/[;,]/).map(resolveOne).filter(Boolean);\n  if(!violationDate) violationDate = toks[0] || null;\n  if(!discoveryDate) discoveryDate = toks[1] || toks[0] || null;\n}\nif(!violationDate){\n  return JSON.stringify({ error: 'Не смог распознать дату нарушения. Передай дату нарушения (ГГГГ-ММ-ДД или «вчера/сегодня»).', received: String(query||'') });\n}\nif(!discoveryDate) discoveryDate = new Date(violationDate);\n\nconst vDeadline = new Date(violationDate); vDeadline.setMonth(vDeadline.getMonth()+5); vDeadline.setDate(vDeadline.getDate()+15);\nconst dDeadline = addDays(discoveryDate,20);\nconst expiredByViolation = server >= vDeadline;\nconst expiredByDiscovery = server >= dDeadline;\nreturn JSON.stringify({\n  violationDate: fmt(violationDate),\n  discoveryDate: fmt(discoveryDate),\n  isExpired: expiredByViolation || expiredByDiscovery,\n  expiredReason: expiredByViolation ? 'violation_date' : (expiredByDiscovery ? 'discovery_date' : null),\n  violationDeadline: fmt(vDeadline),\n  discoveryDeadline: fmt(dDeadline),\n  today: fmt(server)\n});\n"
       },
       "type": "@n8n/n8n-nodes-langchain.toolCode",
       "typeVersion": 1,
       "position": [
-        3008,
-        816
+        1904,
+        928
       ],
-      "id": "2974c597-a4df-431b-a652-08194e0c8d19",
+      "id": "751b8ef3-bb0e-42f6-9f25-15038fdc03c7",
       "name": "Рассчитать сроки ст.1"
     },
     {
@@ -153,54 +106,29 @@
         "promptType": "define",
         "text": "={{ $('Нормализация входа TG').item.json.normalized_text }}",
         "options": {
-          "systemMessage": "Ты — HR-ассистент для руководителей компании Контур. Помогаешь оформить дисциплинарные документы: акт об отсутствии и служебную записку.\n\n\n\n## Твоя роль\n- Задаёшь вопросы и собираешь факты — не додумываешь ничего сам. Либо додумываешь, но совсем немного, например помогаешь доофорить просто дату в нужный формат\n- Работаешь строго в рамках предоставленных данных\n- Граница: до передачи документов кадровому эксперту включительно\n- Если ситуация нестандартная — направляй к Касмыниной О. или Черепановой Т.\n\n## Интерфейс\nТы общаешься с руководителем в Telegram. Сообщения о доказательствах в квадратных скобках вида\n«[Доказательство-фото получено...]» — это служебные маркеры от системы, НЕ текст руководителя:\nвоспринимай их как факт о приложенном файле и продолжай диалог по алгоритму.\n\n## Алгоритм работы\n\n### Шаг 1. Приветствие и выяснение ситуации\nПоздоровайся и попроси описать ситуацию.\n\n### Шаг 2. Сбор данных о нарушении\nПоследовательно уточни (по одному вопросу за раз):\n1. ФИО сотрудника, должность, подразделение/отдел\n2. Дата отсутствия (формат ГГГГ-ММ-ДД)\n3. Когда обнаружено отсутствие (дата обнаружения, формат ГГГГ-ММ-ДД)\n4. Время отсутствия (с ... по ...)\n5. Город и адрес рабочего места, где сотрудник должен был находиться\n6. Удалось ли связаться с сотрудником? Что выяснилось?\n7. Есть ли уважительная причина?\n8. Есть ли доказательства (скрины СКУД, переписка и т.д.)? Можно прислать фото прямо в чат.\n9. ФИО, должность и подразделение/отдел руководителя — он автор служебной записки и составитель акта (если не очевидно)\n10. Свидетели отсутствия. Сначала поясни руководителю, зачем они нужны: «Акт об отсутствии на рабочем месте подписывают свидетели — коллеги, которые подтверждают, что сотрудник действительно не был на месте. Нужны минимум двое. Укажите, пожалуйста, ФИО и должность каждого». Затем собери ФИО и должность ДВУХ свидетелей.\n\n### Шаг 3. Суммаризация\nКратко перескажи собранные данные руководителю для проверки.\n\n### Шаг 4. Проверка по срокам (обязательно, ДО генерации)\nВызови инструмент calc_deadlines, передав даты строкой строго в формате:\n\"violationDate=ГГГГ-ММ-ДД; discoveryDate=ГГГГ-ММ-ДД\"\nИнструмент вернёт JSON: isExpired, expiredReason, violationDeadline, discoveryDeadline.\nНИКОГДА не считай сроки сам — доверяй только числам из инструмента.\n\nДальше действуй СТРОГО так:\n- isExpired = false → ОБЯЗАТЕЛЬНО отправь руководителю отдельным сообщением вердикт:\n  «✅ Срок не истёк, можно привлекать. Крайние сроки: по нарушению — {violationDeadline}, по обнаружению — {discoveryDeadline}.»\n  Затем спроси: «Всё верно? Формирую документы?» и ЗАВЕРШИ свой ход.\n  НЕ вызывай generate_documents в этом же сообщении — дождись ответа руководителя.\n- isExpired = true → НЕ запускай генерацию. Сообщи, что срок истёк (буфер Контура: 5 мес. 15 дн.\n  от нарушения, 20 дн. от обнаружения), и заверши кейс, порекомендовав обратиться к Касмыниной О. или Черепановой Т.\n\n\n### Шаг 5. Генерация документов\nТОЛЬКО после того как руководитель подтвердил («да», «формируй» и т.п.) в ответ на вердикт по срокам — вызови инструмент `generate_documents`, передав JSON:\nВажно!\n\nв scenario передавай \"progul_ochny\" Если ты зафиксировал прогул, и именно очный прогул. Т.е. человек не ходит в офис. Во всех остальных случаях присваивай - \"zaglushka\"\n```\n{\n  \"scenario\": \"progul_ochny\",\n  \"employee\": { \"name\": \"...\", \"position\": \"...\", \"department\": \"...\" },\n  \"manager\": { \"name\": \"...\", \"position\": \"...\", \"department\": \"...\" },\n  \"workplace\": { \"city\": \"...\", \"address\": \"...\" },\n  \"witnesses\": [\n    { \"name\": \"...\", \"position\": \"...\" },\n    { \"name\": \"...\", \"position\": \"...\" }\n  ],\n  \"violation\": { \"date\": \"ГГГГ-ММ-ДД\", \"discoveryDate\": \"ГГГГ-ММ-ДД\", \"absenceStart\": \"ЧЧ:ММ\", \"absenceEnd\": \"ЧЧ:ММ\", \"description\": \"...\" },\n  \"respectableReason\": false,\n  \"respectableReasonComment\": \"\",\n  \"evidenceDescription\": \"...\",\n  \"contactAttempts\": \"...\"\n}\n```\nПоля employee, manager, workplace, violation — объекты; witnesses — массив из двух свидетелей. Передавай ровно то, что собрал у руководителя; ничего не выдумывай.\nГенерация сама пришлёт в чат промежуточные статусы (⏳) и готовые документы.\n\n### Шаг 6. Передача результата\nПокажи сгенерированные документы. Напомни: передать пакет Черепановой Т. или Касмыниной О.\n\n## Важные правила\n- Никогда не цитируй статьи ТК РФ по памяти — только то, что вернул инструмент\n- Не предлагай меры, выходящие за рамки чеклиста\n- Один вопрос за раз — не задавай несколько вопросов в одном сообщении\n- Если чего-то не знаешь — скажи прямо и уточни"
+          "systemMessage": "Ты — HR-ассистент для руководителей компании Контур. Помогаешь оформить дисциплинарные документы: акт об отсутствии и служебную записку.\n\n## Твоя роль\n- Задаёшь вопросы и собираешь факты — не додумываешь ничего сам. Максимум помогаешь привести дату в нужный формат.\n- Работаешь строго в рамках предоставленных данных.\n- Граница: до передачи документов кадровому эксперту включительно.\n- Если ситуация нестандартная — направляй к Касмыниной О. или Черепановой Т.\n\n## Интерфейс\nТы общаешься с руководителем в Mattermost (личные сообщения). Служебные маркеры в квадратных скобках вида «[Пользователь прислал вложение...]» — это факт от системы, НЕ текст руководителя: учитывай его и продолжай по алгоритму.\n\n## Алгоритм работы\n\n### Шаг 1. Приветствие\nПоздоровайся и попроси коротко описать ситуацию.\n\n### Шаг 2. Идентификация сотрудника (ДО сбора остальных данных)\nПрежде чем собирать факты — точно определи, о ком речь.\n1. Попроси у руководителя **email или логин в Стаффе** сотрудника-нарушителя (например ivanov@skbkontur.ru или ivanov). Объясни: «Чтобы не перепутать сотрудника (бывают однофамильцы), пришлите его рабочую почту или логин в Стаффе».\n2. Вызови инструмент `Идентификация пользователя`, передав `subject` = почта/логин нарушителя, а в `witnesses` — ФИО свидетелей через «;» (когда они уже названы; на этом шаге можно оставить пустым). Руководитель (автор) определяется автоматически.\n3. Инструмент вернёт данные из Стаффа: по нарушителю — точное совпадение (`subject.match`) или список кандидатов (`subject.candidates`); по свидетелям — кандидаты.\n   - Если пришёл `match` — покажи руководителю ФИО, должность, подразделение, город/офис и спроси: «Это он? Подтвердите».\n   - Если пришёл список `candidates` — перечисли варианты и попроси выбрать нужного.\n   - Если ничего не найдено — попроси уточнить почту/логин.\n4. Данные подтверждённого сотрудника (ФИО, должность, подразделение, город) используй дальше — не переспрашивай их заново.\n\n### Шаг 3. Сбор данных о нарушении\nПоследовательно уточни недостающее (по одному вопросу за раз):\n1. Дата отсутствия (можно словами: «вчера», «позавчера», «2026-06-18»).\n2. Когда обнаружено отсутствие (дата обнаружения; тоже можно словами).\n3. Время отсутствия (с ... по ...).\n4. Адрес рабочего места (город обычно уже есть из Стаффа — уточни адрес/помещение).\n5. Удалось ли связаться с сотрудником? Что выяснилось?\n6. Есть ли уважительная причина?\n7. Есть ли доказательства (скрины СКУД, переписка и т.д.)? Опиши их текстом.\n8. Свидетели отсутствия. Поясни: «Акт об отсутствии подписывают свидетели — коллеги, подтверждающие, что сотрудника не было на месте. Нужны минимум двое. Укажите ФИО и должность каждого». Собери ФИО двух свидетелей; при необходимости вызови `Идентификация пользователя` ещё раз с их ФИО в `witnesses` и уточни при неоднозначности.\n\n### Шаг 4. Суммаризация\nКратко перескажи собранные данные руководителю для проверки.\n\n### Шаг 5. Проверка сроков (обязательно, ДО генерации)\nВызови инструмент `calc_deadlines`, передав даты строкой, напр.:\n\"violationDate=<дата нарушения>; discoveryDate=<дата обнаружения>\"\nДаты можно передавать как есть, в том числе относительные («вчера», «сегодня») — инструмент сам приведёт их к конкретной дате от серверного «сегодня». НИКОГДА не считай даты и сроки сам — доверяй только числам из инструмента.\n\nДальше действуй СТРОГО так:\n- isExpired = false → ОБЯЗАТЕЛЬНО отправь руководителю отдельным сообщением вердикт:\n  «✅ Срок не истёк, можно привлекать.» Затем спроси: «Всё верно? Формирую документы?» и ЗАВЕРШИ ход. НЕ вызывай generate_documents в этом же сообщении — дождись ответа.\n- isExpired = true → НЕ запускай генерацию. Сообщи, что срок истёк (буфер Контура: 5 мес. 15 дн. от нарушения, 20 дн. от обнаружения), и порекомендуй обратиться к Касмыниной О. или Черепановой Т.\n\n### Шаг 6. Генерация документов\nТОЛЬКО после подтверждения руководителем («да», «формируй») — вызови `generate_documents`, передав JSON.\nВ `scenario` передавай \"progul_ochny\", если зафиксирован очный прогул (сотрудник не ходит в офис). Во всех остальных случаях — \"zaglushka\".\n```\n{\n  \"scenario\": \"progul_ochny\",\n  \"employee\": { \"name\": \"...\", \"position\": \"...\", \"department\": \"...\" },\n  \"manager\": { \"name\": \"...\", \"position\": \"...\", \"department\": \"...\" },\n  \"workplace\": { \"city\": \"...\", \"address\": \"...\" },\n  \"witnesses\": [\n    { \"name\": \"...\", \"position\": \"...\" },\n    { \"name\": \"...\", \"position\": \"...\" }\n  ],\n  \"violation\": { \"date\": \"ГГГГ-ММ-ДД\", \"discoveryDate\": \"ГГГГ-ММ-ДД\", \"absenceStart\": \"ЧЧ:ММ\", \"absenceEnd\": \"ЧЧ:ММ\", \"description\": \"...\" },\n  \"respectableReason\": false,\n  \"respectableReasonComment\": \"\",\n  \"evidenceDescription\": \"...\",\n  \"contactAttempts\": \"...\"\n}\n```\nДаты нарушения передавай уже в формате ГГГГ-ММ-ДД (используй значения, которые вернул calc_deadlines). employee/manager/workplace/violation — объекты; witnesses — массив. Передавай ровно то, что собрал; ничего не выдумывай. Генерация сама пришлёт статусы (⏳) и готовые документы.\n\n### Шаг 7. Передача результата\nПокажи сгенерированные документы. Напомни: передать пакет Черепановой Т. или Касмыниной О.\n\n## Важные правила\n- Никогда не цитируй статьи ТК РФ по памяти — только то, что вернул инструмент.\n- Даты не считаешь сам — только через calc_deadlines.\n- Один вопрос за раз.\n- Если чего-то не знаешь — скажи прямо и уточни."
         }
       },
-      "id": "45e69cf3-1452-4aba-b41a-5ae77e523898",
+      "id": "c37f8597-f461-486d-9643-469f000c1c2b",
       "name": "HR-ассистент",
       "type": "@n8n/n8n-nodes-langchain.agent",
       "typeVersion": 1.7,
       "position": [
-        2816,
-        624
+        1616,
+        656
       ]
     },
     {
       "parameters": {
-        "model": {
-          "__rl": true,
-          "value": "claude-opus-4-8",
-          "mode": "list",
-          "cachedResultName": "Claude Opus 4.8"
-        },
-        "options": {}
-      },
-      "type": "@n8n/n8n-nodes-langchain.lmChatAnthropic",
-      "typeVersion": 1.3,
-      "position": [
-        2608,
-        816
-      ],
-      "id": "1eaa294d-b902-4267-8a06-83e71294ed3a",
-      "name": "Anthropic Chat Model",
-      "credentials": {
-        "anthropicApi": {
-          "id": "5kFSALXbGSs7RnI8",
-          "name": "Anthropic account"
-        }
-      }
-    },
-    {
-      "parameters": {
-        "jsCode": "// Формат ответа агента для Telegram (HTML) + разбивка на части ≤4096\nconst chatId = $('Telegram: входящие').item.json.message.chat.id;\nlet t = String($json.output ?? '');\n\n// 1) экранируем HTML-спецсимволы (ДО вставки тегов)\nt = t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');\n\n// 2) markdown → HTML\nt = t.replace(/\\*\\*(.+?)\\*\\*/g, '<b>$1</b>');     // **жирный** → <b>\nt = t.replace(/^#{1,6}\\s*(.+)$/gm, '<b>$1</b>');  // ## Заголовок → жирный\n\n// 3) режем на части ≤4000 по границам строк (теги <b> внутри строки не рвутся)\nconst LIMIT = 4000;\nconst parts = [];\nlet buf = '';\nfor (const line of t.split('\\n')) {\n  if (buf.length + line.length + 1 > LIMIT) {\n    if (buf) parts.push(buf);\n    buf = line;\n    while (buf.length > LIMIT) { parts.push(buf.slice(0, LIMIT)); buf = buf.slice(LIMIT); }\n  } else {\n    buf = buf ? buf + '\\n' + line : line;\n  }\n}\nif (buf) parts.push(buf);\n\n// несколько items → Telegram-нода (per item) отправит каждую часть отдельным сообщением\nreturn parts.map(p => ({ json: { chat_id: chatId, text: p } }));"
+        "jsCode": "// Формат ответа для Mattermost (markdown нативный) + разбивка на части.\nconst chatId = $('Нормализация входа TG').first().json.chat_id;\nlet t = String($json.output ?? '');\nconst LIMIT = 15000; // лимит поста MM ~16383, берём с запасом\nconst parts = [];\nlet buf = '';\nfor (const line of t.split('\\n')) {\n  if (buf.length + line.length + 1 > LIMIT) {\n    if (buf) parts.push(buf);\n    buf = line;\n    while (buf.length > LIMIT) { parts.push(buf.slice(0, LIMIT)); buf = buf.slice(LIMIT); }\n  } else {\n    buf = buf ? buf + '\\n' + line : line;\n  }\n}\nif (buf) parts.push(buf);\nif (!parts.length) parts.push('');\nreturn parts.map(p => ({ json: { chat_id: chatId, text: p } }));\n"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        3168,
-        496
+        1968,
+        528
       ],
-      "id": "b45844fa-95f1-4850-b09d-bcf50886ab44",
+      "id": "9d035e2d-4fa3-4fe9-a1ae-7c696b739537",
       "name": "Code in JavaScript"
     },
     {
@@ -209,9 +137,9 @@
         "description": "Генерирует пакет документов (акт об отсутствии + служебную записку). Сроки ст.193 проверяет инструмент calc_deadlines — вызывай generate_documents ТОЛЬКО после проверки сроков (isExpired=false) и подтверждения руководителем корректности всех данных.",
         "workflowId": {
           "__rl": true,
-          "value": "VSXqMIrZYbAFUGYk",
+          "value": "Fyxo9TfWY1kkuKYY",
           "mode": "list",
-          "cachedResultUrl": "/workflow/VSXqMIrZYbAFUGYk",
+          "cachedResultUrl": "/workflow/Fyxo9TfWY1kkuKYY",
           "cachedResultName": "Генерация документов"
         },
         "fields": {
@@ -248,61 +176,41 @@
             },
             {
               "name": "chat_id",
-              "stringValue": "={{ $('Telegram: входящие').item.json.message.chat.id }}"
+              "stringValue": "={{ $('Нормализация входа TG').first().json.chat_id }}"
             }
           ]
         }
       },
-      "id": "96b7035d-9af6-475f-a322-fc17832298ca",
+      "id": "fe9f4571-8587-48dc-b862-aa50e314d790",
       "name": "Генерация документов",
       "type": "@n8n/n8n-nodes-langchain.toolWorkflow",
       "typeVersion": 1.3,
       "position": [
-        3168,
-        800
+        2032,
+        864
       ]
-    },
-    {
-      "parameters": {
-        "resource": "file",
-        "fileId": "={{ $('Нормализация входа TG').first().json.evidence.file_id }}",
-        "additionalFields": {}
-      },
-      "id": "e1842088-abe8-4766-b664-4d24d4b5aff5",
-      "name": "Telegram: скачать фото",
-      "type": "n8n-nodes-base.telegram",
-      "typeVersion": 1.2,
-      "position": [
-        2272,
-        432
-      ],
-      "webhookId": "e9febf60-8646-40b0-920c-516d71aa7244",
-      "credentials": {
-        "telegramApi": {
-          "id": "aESJLABaZl21D7lx",
-          "name": "hr_assistant_kontur_bot"
-        }
-      }
     },
     {
       "parameters": {
         "jsCode": "const prev = $('Нормализация входа TG').first().json;\nconst buf = await this.helpers.getBinaryDataBuffer(0, 'data');\nreturn [{ json: {\n  chat_id: prev.chat_id,\n  file_id: prev.evidence.file_id,\n  file_size: prev.evidence.file_size,\n  downloaded: true,\n  note: 'telegram photo',\n  file_b64: buf.toString('base64'),\n  normalized_text: prev.normalized_text\n} }];"
       },
-      "id": "57a5762c-f04c-42cb-bd40-49cbc89c1777",
+      "id": "f91df3e3-f044-4f2e-972a-39bb3676b54e",
       "name": "Кодировать фото (base64)",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        2448,
-        432
-      ]
+        1248,
+        464
+      ],
+      "disabled": true
     },
     {
       "parameters": {
         "schema": {
           "__rl": true,
-          "value": "public",
-          "mode": "list"
+          "value": "hr_disciplinary_assistant",
+          "mode": "list",
+          "cachedResultName": "hr_disciplinary_assistant"
         },
         "table": {
           "__rl": true,
@@ -403,55 +311,239 @@
         },
         "options": {}
       },
-      "id": "0c3fd1a3-4feb-42c5-af78-05cb45616043",
+      "id": "60700160-44b2-46af-8467-f90cb21fc718",
       "name": "Postgres: запись доказательства",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.6,
       "position": [
-        2640,
-        432
+        1440,
+        464
       ],
       "credentials": {
         "postgres": {
-          "id": "Fvszl2WiBUELNhgw",
-          "name": "hr_assistant_psql"
+          "id": "31G0c3e8sLXWZIif",
+          "name": "n8n_hr_disciplinary_assistant"
+        }
+      },
+      "disabled": true
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "preview-pro",
+          "mode": "list",
+          "cachedResultName": "preview-pro"
+        },
+        "responsesApiEnabled": false,
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        1424,
+        864
+      ],
+      "id": "76d4730b-b609-410e-ac97-b1f26359c60d",
+      "name": "KonturGPT Chat Model",
+      "credentials": {
+        "openAiApi": {
+          "id": "dXyjzDsxvRHuCnNq",
+          "name": "Kontur.GPT"
         }
       }
+    },
+    {
+      "parameters": {
+        "content": "Агент немножко меняется. Его работа, то есть у нас помимо того, что у нас изменяются входные параметры, у нас изменяются и выходные параметры, у нас изменяется логика, прежде чем просчитывать сроки и генерировать документы необходимо правильно идентифицировать пользователя и отобрать работу ввода.\nТо есть человек просто указывает условно имя или фамилию, либо почту. Мы прямо об этом говорим. Два варианта:\n- почта\n- логин в стафе\nМы смотрим нашу базу: есть ли он у нас. То есть уже вызываем инструмент идентификации пользователя и возвращаем из идентификации пользователя конкретный ответ и уточняем еще раз: это этот человек или нет, или нам поискать еще."
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1616,
+        448
+      ],
+      "id": "0958b201-8503-4ae6-946b-007ad5f81022",
+      "name": "Sticky Note"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "cS7KpqYdxIP7XYkE",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/cS7KpqYdxIP7XYkE",
+          "cachedResultName": "Идентификация пользователя"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "subject": "={{ $fromAI('subject','email или логин сотрудника-нарушителя, напр. ivanov@skbkontur.ru или ivanov','string') }}",
+            "manager": "={{ ($('Нормализация входа TG').first().json.sender_name || '').replace('@','') }}",
+            "witnesses": "={{ $fromAI('witnesses','ФИО свидетелей через точку с запятой, напр.: Смирнов Иван; Петров Пётр','string') }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "subject",
+              "displayName": "subject",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "manager",
+              "displayName": "manager",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "witnesses",
+              "displayName": "witnesses",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.toolWorkflow",
+      "typeVersion": 2.2,
+      "position": [
+        1776,
+        864
+      ],
+      "id": "d09b9af2-0f47-4526-b2d3-fe47ee72c603",
+      "name": "Идентификация пользователя"
+    },
+    {
+      "parameters": {
+        "content": "Здесь давай использовать вместо Telegram наш с тобой коннектор и веб-хук. То есть здесь все задокументировано, мы с тобой в целом эту историю проходили. Просто заменим Telegram-бота. Естественно, нам нужно будет также нормализовывать данные, убирать лишнее и так далее, так далее, идентифицировать, есть ли фото или нет.",
+        "height": 448,
+        "width": 528
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -48,
+        816
+      ],
+      "typeVersion": 1,
+      "id": "70d59806-36b3-4919-a2a7-3b26f5a76b94",
+      "name": "Sticky Note8"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "mattermost-in",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        432,
+        656
+      ],
+      "id": "d48711c8-edeb-4fc4-a830-c962e69edaa9",
+      "name": "Webhook1",
+      "webhookId": "9fe3bbf1-d64f-4dc5-8b95-b7592d44e300"
+    },
+    {
+      "parameters": {
+        "content": "Это тоже обращение. Я не понимаю: либо мы разом слушаем, либо собираем сразу фото. Как здесь лучше работать с вебхуком? Рассказывай мне."
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1040,
+        208
+      ],
+      "id": "1cee224b-eb50-4a06-9ec8-ae1d662b48a9",
+      "name": "Sticky Note1"
+    },
+    {
+      "parameters": {
+        "resource": "file",
+        "fileId": "={{ $('Нормализация входа TG').first().json.evidence.file_id }}",
+        "additionalFields": {}
+      },
+      "id": "dc514bd8-3b1a-433b-880b-de5fbda126c0",
+      "name": "Telegram: скачать фото?????",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1072,
+        416
+      ],
+      "webhookId": "e9febf60-8646-40b0-920c-516d71aa7244",
+      "disabled": true
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://chat.skbkontur.ru/api/v4/posts",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBearerAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ channel_id: $json.chat_id, message: $json.text }) }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        3088,
+        624
+      ],
+      "id": "8cead745-913f-4767-bbe9-0463e54d6a1c",
+      "name": "Отправить сообщение",
+      "credentials": {
+        "httpBearerAuth": {
+          "id": "xtnxUI9OKeXEHJCS",
+          "name": "Контур. Mattermost"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "content": "Хвост так же нужно переписать. Здесь у меня просто взял свою универсальную ноду, которую тестировал: задача отправить правильный ну правильному человеку по полученным данным ранее все необходимое."
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        2480,
+        448
+      ],
+      "id": "464f4fb8-681f-4e0e-a544-f66ac93edbc3",
+      "name": "Sticky Note2"
+    },
+    {
+      "parameters": {
+        "content": "### Добавить credentionals к Postgres\n\n`database`: n8n\n`username`: hr_disciplinary_assistant_user\n`password` отправят в личку\n`host`: devof-pt-vxsa1.dev.kontur.ru\n`port`: 5432\n\nВ SQL ноде выбирай схему `hr_disciplinary_assistant`\n\nНам с тобой схему создали, все четко у нас здесь, но есть проблема: не создали все таблички, которые нам нужны. То есть пока там табличек нет в Postgres, поэтому может что-то падает.\n\nМожешь мне помочь их создать? Можешь отдельно прям набор нот создать для Postgres, чтобы я их подергал и по создавал необходимые таблички? "
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1440,
+        208
+      ],
+      "id": "5ac47d25-abd6-459f-8aa2-c4301f0c8457",
+      "name": "Sticky Note3"
     }
   ],
   "pinData": {},
   "connections": {
-    "Telegram: входящие": {
-      "main": [
-        [
-          {
-            "node": "Нормализация входа TG",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
     "Нормализация входа TG": {
       "main": [
-        [
-          {
-            "node": "Есть фото?",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Есть фото?": {
-      "main": [
-        [
-          {
-            "node": "Telegram: скачать фото",
-            "type": "main",
-            "index": 0
-          }
-        ],
         [
           {
             "node": "HR-ассистент",
@@ -494,22 +586,11 @@
         ]
       ]
     },
-    "Anthropic Chat Model": {
-      "ai_languageModel": [
-        [
-          {
-            "node": "HR-ассистент",
-            "type": "ai_languageModel",
-            "index": 0
-          }
-        ]
-      ]
-    },
     "Code in JavaScript": {
       "main": [
         [
           {
-            "node": "Telegram: ответ",
+            "node": "Отправить сообщение",
             "type": "main",
             "index": 0
           }
@@ -527,33 +608,33 @@
         ]
       ]
     },
-    "Telegram: скачать фото": {
-      "main": [
-        [
-          {
-            "node": "Кодировать фото (base64)",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Кодировать фото (base64)": {
-      "main": [
-        [
-          {
-            "node": "Postgres: запись доказательства",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Postgres: запись доказательства": {
-      "main": [
+    "KonturGPT Chat Model": {
+      "ai_languageModel": [
         [
           {
             "node": "HR-ассистент",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Идентификация пользователя": {
+      "ai_tool": [
+        [
+          {
+            "node": "HR-ассистент",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook1": {
+      "main": [
+        [
+          {
+            "node": "Нормализация входа TG",
             "type": "main",
             "index": 0
           }
@@ -561,17 +642,15 @@
       ]
     }
   },
-  "active": true,
+  "active": false,
   "settings": {
     "executionOrder": "v1",
-    "binaryMode": "separate",
-    "availableInMCP": false
+    "binaryMode": "separate"
   },
-  "versionId": "4139c77e-3739-4032-8638-f2b8c71aa485",
+  "versionId": "0982378a-28a9-4d85-9535-61621a5138a4",
   "meta": {
-    "templateCredsSetupCompleted": true,
-    "instanceId": "9a987c8c5e53be071f8410e33526cc5ade2a52fb0a040cf9a29e79d0943782f4"
+    "instanceId": "b3d36343f45620c725ef3c6f9f9a245602756137b7380d1eea459f0cd49f51da"
   },
-  "id": "xvn4xaB9ZexlCVDG",
+  "id": "QVJ5AsIt4AcBih3V",
   "tags": []
 }

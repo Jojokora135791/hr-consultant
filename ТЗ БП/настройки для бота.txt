@@ -1,0 +1,29 @@
+
+import aiohttp
+from mmpy_bot import Plugin, listen_to, listen_webhook
+
+class MyPlugin(Plugin):
+    # 1. Обработчик личных сообщений
+    @listen_to('.*', direct_only=True)
+    async def handle_direct_message(self, message):
+        # Отправляем сообщение в ваш n8n workflow
+        webhook_url = 
+        async with aiohttp.ClientSession() as session:
+            payload = {
+                "channel_id": message.channel_id,
+                "message": message.text,
+                "user_id": message.user_id
+            }
+            await session.post(webhook_url, json=payload)
+
+    # 2. Обработчик вебхуков от n8n
+    @listen_webhook(r'/n8n-response')
+    async def on_n8n_response(self, event):
+        channel_id = event.body.get('channel_id')
+        response_text = event.body.get('response')
+        if channel_id and response_text:
+            await self.driver.create_post(
+                channel_id=channel_id,
+                message=response_text
+            )
+            self.driver.respond_to_web(event, {"status": "ok"})

@@ -1,19 +1,19 @@
 ---
 name: project-architecture
-description: "Архитектура n8n workflow v7 (Telegram + Claude диалог + детерминированная генерация .docx БЕЗ Ollama + Postgres + скриншоты в СЗ); актуальный источник правды — CLAUDE.md. Текст ниже — история v6"
+description: "Архитектура n8n workflow. АКТУАЛЬНО — v8 (Mattermost + KonturGPT внутри контура + Staff). Источник правды — CLAUDE.md и [[kontur-integrations]]. Текст ниже — история v6/v7"
 metadata:
   type: project
 ---
 
-> ⚠️ **АКТУАЛЬНО v7 (источник правды — `CLAUDE.md`).** Что изменилось от v6 ниже:
-> - **Генерация без Ollama** — склонение ФИО через `petrovich` (+JS-fallback), обстоятельства/
->   приложения — склейка кодом. Островок нарушений (Ollama) выключен (`disabled`, задел под RAG).
-> - Диалог — только Claude (нода `Ollama Chat Model` удалена).
-> - **Скриншоты в СЗ:** фото → `hr_evidence.file_b64` → вставка в .docx (OOXML, «Скриншот N»).
-> - **Прод:** Docker (n8n+Postgres+Caddy) на Timeweb VPS в **Нидерландах**, домен hr-kontur.ru.
->   Anthropic блочит РФ-IP → НЕ в РФ. См. [[deploy-prod-netherlands]].
-> - n8n запуск: `NODE_FUNCTION_ALLOW_EXTERNAL=adm-zip,petrovich`.
-> - Postgres `chat_id = $1::text` (колонка TEXT, из n8n — число).
+> ⚠️ **АКТУАЛЬНО v8 (источник правды — `CLAUDE.md` + [[kontur-integrations]]).** Переезд внутрь контура:
+> - **Интерфейс — Mattermost** (бот на `mmpy_bot`, `bot/`): WS → webhook `/mattermost-in`; выход — `POST /api/v4/posts`. Telegram убран.
+> - **Диалог — KonturGPT** (`preview-pro`, внутри контура), не Claude/Anthropic. n8n на `n8n-common.testkontur.ru`.
+> - **Идентификация сотрудников через Staff API** (workflow «Идентификация пользователя», токен из Паспорта).
+> - **calc_deadlines** расширен: резолвит относительные даты («вчера/сегодня/завтра») + сроки ст.193.
+> - **Postgres** — схема `hr_disciplinary_assistant`, SSL=`disable`; 🔴 блокер прав DBA + pg_hba (см. [[kontur-integrations]]).
+> - **Отлажены вживую только Mattermost + Паспорт + переезд**; идентификация/даты/генерация-в-MM — не тестированы.
+> - **Генерация без Ollama** (petrovich +JS), скриншоты в СЗ (механика готова, приём фото в MM отложен).
+> - `deploy/` (Нидерланды) — legacy, см. [[deploy-prod-netherlands]].
 
 ## Инфраструктура v6 (локально, macOS M3) — историческая, см. CLAUDE.md для прод
 

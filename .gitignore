@@ -18,3 +18,9 @@ n8n/temp/
 # секреты окружения (деплой)
 .env
 deploy/.env
+
+# зависимости / артефакты коннектора и бота
+node_modules/
+.venv/
+__pycache__/
+*.pyc

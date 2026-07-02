@@ -1,0 +1,187 @@
+{
+  "name": "Идентификация пользователя",
+  "nodes": [
+    {
+      "parameters": {
+        "inputSource": "passthrough"
+      },
+      "id": "c055762a-8fe7-4141-a639-df2372f30060",
+      "typeVersion": 1.1,
+      "name": "When Executed by Another Workflow",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "position": [
+        272,
+        352
+      ]
+    },
+    {
+      "parameters": {
+        "content": "Эта тулза - сбор данных о пользаке. На вход в него емаил и айдишник пользователя из MM\nа также тех, кого он укажет руководителем и свидетелями\n\nЗадача - обратиться в корпоративный стаф, запросить данные по пользоваетлям и отослать обратно для проверки\n\n\nЯ примерно соберу порядок ноды, а ты поправишь ее\n",
+        "height": 320,
+        "width": 320
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -176,
+        176
+      ],
+      "id": "b9da648e-7fd9-4e62-a2c8-84fae0df4fe4",
+      "name": "Sticky Note"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://passport.skbkontur.ru/connect/token",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "contentType": "form-urlencoded",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "grant_type",
+              "value": "client_credentials"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "9c01dfee-8fe8-41da-a099-4cb511d52f94",
+      "name": "Получение токена",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        496,
+        352
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "lUcrRKoNK0DLfjYr",
+          "name": "Контур. Паспорт"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "content": "### Получаем токен в Паспорте\nВ ответе будет:\n- access_token - токен безопасности\n- token_type - тип токена\n- expires_in - время жизни токена, в секундах\n- scope",
+        "height": 192,
+        "width": 288
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        352,
+        528
+      ],
+      "typeVersion": 1,
+      "id": "cb566afc-a176-4b79-bf01-238d36151461",
+      "name": "Sticky Note1"
+    },
+    {
+      "parameters": {
+        "content": "## Приложение\nВ Контур Паспорт **SherpaRPAapp** создано приложение и от него получены креды:\n- ClientId\n- ClientSecret\n\nhttps://passport.skbkontur.ru/apps/manage/SherpaHROrdersAPP\n\n### Авторизация в паспорте\n\nНужно в заголовке передать ключ `Authorization` со значением `Basic value`, где `value` формируется кодированием в base64 строки из clientId и clientSecret, разделенных двоеточием - base64(clientId:clientSecret).\n\nНа маке это команда в терминале:\n`echo -n \"твоя строка\" | base64`",
+        "height": 368,
+        "width": 448
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        240,
+        -64
+      ],
+      "typeVersion": 1,
+      "id": "0e018b7f-3c70-4191-90b7-efc1b970d286",
+      "name": "Sticky Note3"
+    },
+    {
+      "parameters": {
+        "content": "Обращение в Стафф\n\nПолучить список Сотрудников\nget\n/api/Users\nQuery parameters\n$top:\ninteger\n<int32>\ndefault: 2000\nКолличество элементов для отображения\n$skip:\ninteger\n<int32>\ndefault: 0\nСмещение (сколько элементов пропустить)\nview:\nstring\nВозвращаемое представление: Light/Large\nEnum:\nlight\nmedium\nlarge\nq:\nstring\nСтрока поиска\nResponses\n200\nOK\nКонструктор\nget\n/api/Users\nПлощадка\n\nБоевая\nАутентификация\n\nАутентификация 1\n\nАутентификация 2\nAuthorization\nВставьте JWT токен полученый от паспорта в формате: Bearer JWT\n\nВозвращаемый массив\n\n[\n  {\n    \"email\": \"syv@skbkontur.ru\",\n    \"post\": \"Менеджер проектов\",\n    \"innerPhone\": \"78935\",\n    \"mobilePhone\": \"89124090526\",\n    \"officeItem\": {\n      \"town\": \"Челябинск\",\n      \"id\": 72,\n      \"title\": \"Елькина 45а\"\n    },\n    \"statusId\": 3,\n    \"status\": \"recruited\",\n    \"subscribersCount\": 19,\n    \"birthday\": \"1981-01-17T00:00:00.000Z\",\n    \"informalStatus\": \"Клиентский сегмент Государственные организации\",\n    \"id\": 2,\n    \"sid\": \"S-1-5-21-1231152155-1323711836-1525454979-8630\",\n    \"login\": \"kontur\\\\syv\",\n    \"firstname\": \"Юлия\",\n    \"surname\": \"Долгих\",\n    \"patronymic\": \"Владимировна\",\n    \"photoPath\": \"895-968-1790/b86ba7fe-79a7-4a77-966b-c86bd86597dd/img_2447-22.jpg\"\n  },",
+        "height": 224,
+        "width": 288
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1168,
+        544
+      ],
+      "id": "0a579f23-8fad-4a74-8788-99ab3e46b8dc",
+      "name": "Sticky Note2"
+    },
+    {
+      "parameters": {
+        "content": "Обращение в Стафф\n\nПрофиль сторудника по Id\nget\n/api/Users/{id}\nPath parameters\nid:\ninteger\n<int32>\nrequired\nидентификатор пользователя\nResponses\n200\nOK\nКонструктор\nget\n/api/Users/{id}\nПлощадка\n\nБоевая\nАутентификация\n\nАутентификация 1\n\nАутентификация 2\nAuthorization\nВставьте JWT токен полученый от паспорта в формате: Bearer JWT"
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1584,
+        544
+      ],
+      "id": "41f20f76-81a0-48d7-a735-fade9eb3d7c5",
+      "name": "Sticky Note4"
+    },
+    {
+      "parameters": {
+        "content": "Обращение в стафф - тяжелый запрос, лучше подзаписать данные прям тут"
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        736,
+        176
+      ],
+      "id": "d77c8aee-cc9e-421f-a838-dfc9b26b34b1",
+      "name": "Sticky Note5"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Точечный поиск в Стаффе по нарушителю, руководителю и свидетелям.\n// НЕ выкачиваем всю базу — только q-запросы по конкретным людям.\nconst helpers = this.helpers;\nconst token = $('Получение токена').first().json.access_token;\nconst src = $('When Executed by Another Workflow').first().json || {};\nconst subject = String(src.subject || '').trim();\nconst manager = String(src.manager || '').trim();\nconst witnessesRaw = String(src.witnesses || '').trim();\n\nasync function staff(q){\n  if(!q) return [];\n  try{\n    const res = await helpers.httpRequest({\n      method:'GET', url:'https://staff.skbkontur.ru/api/Users',\n      qs:{ q, view:'large', '$top':50 },\n      headers:{ Authorization:'Bearer '+token }, json:true\n    });\n    if(Array.isArray(res)) return res;\n    if(res && Array.isArray(res.items)) return res.items;\n    return [];\n  }catch(e){ return []; }\n}\nfunction slim(u){\n  if(!u) return null;\n  return {\n    id:u.id, login:u.login, email:u.email,\n    fio:[u.surname,u.firstname,u.patronymic].filter(Boolean).join(' '),\n    surname:u.surname, firstname:u.firstname, patronymic:u.patronymic,\n    post:u.post, city:u.officeItem && u.officeItem.town,\n    office:u.officeItem && u.officeItem.title, status:u.status\n  };\n}\nfunction exact(list, key){\n  key=String(key||'').toLowerCase();\n  const kd=key.replace(/^kontur\\\\/,'');\n  return list.find(u =>\n    String(u.email||'').toLowerCase()===key ||\n    String(u.login||'').toLowerCase()===key ||\n    String(u.login||'').toLowerCase().replace(/^kontur\\\\/,'')===kd\n  ) || null;\n}\nasync function identify(term){\n  if(!term) return { query:term, match:null, candidates:[] };\n  const list = await staff(term);\n  const ex = exact(list, term);\n  if(ex) return { query:term, match:slim(ex), candidates:[] };\n  return { query:term, match:null, candidates:list.slice(0,5).map(slim) };\n}\n\nconst subjectResult = await identify(subject);\nconst managerResult = await identify(manager);\n\nconst names = witnessesRaw ? witnessesRaw.split(/[;\\n]/).map(s=>s.trim()).filter(Boolean) : [];\nconst witnesses = [];\nfor(const name of names){\n  const list = await staff(name);\n  witnesses.push({ query:name, candidates:list.slice(0,5).map(slim) });\n}\n\nreturn [{ json: { subject:subjectResult, manager:managerResult, witnesses } }];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1248,
+        352
+      ],
+      "id": "staff_search_node_id",
+      "name": "Обращение в Стафф (поиск)"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When Executed by Another Workflow": {
+      "main": [
+        [
+          {
+            "node": "Получение токена",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Получение токена": {
+      "main": [
+        [
+          {
+            "node": "Обращение в Стафф (поиск)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "bc973921-8b86-4410-9461-120d0a4134ef",
+  "meta": {
+    "instanceId": "b3d36343f45620c725ef3c6f9f9a245602756137b7380d1eea459f0cd49f51da"
+  },
+  "id": "cS7KpqYdxIP7XYkE",
+  "tags": []
+}

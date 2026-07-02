@@ -3,68 +3,76 @@
 ## Что это
 
 ИИ-ассистент для руководителей Контура по оформлению дисциплинарных документов (акт об отсутствии,
-служебная записка). Стек: **n8n** + **Claude (диалог)** + **детерминированная генерация .docx**
-+ **Postgres** + **Google Drive (шаблоны)**. Статус: **архитектура v7** — диалог на Claude,
-генерация без LLM (petrovich + JS), скриншоты-доказательства в СЗ, **развёрнут в проде**
-(Docker, сервер в Нидерландах, домен `hr-kontur.ru`).
+служебная записка). Стек: **n8n** + **KonturGPT (диалог)** + **детерминированная генерация .docx**
++ **Postgres** + **Google Drive (шаблоны)**. Статус: **архитектура v8** — переезд **внутрь контура
+Контура**: интерфейс **Mattermost** (бот на `mmpy_bot`), диалог на **KonturGPT**, идентификация
+сотрудников через **Staff API** (токен из Контур Паспорта), генерация без LLM (petrovich + JS).
+
+> 🚦 **Статус отладки (02.07.2026):** отлажены вживую только **Mattermost** (вход/выход) и **переезд**
+> (KonturGPT + n8n внутри контура) + **Паспорт** (OAuth-токен). Остальное — **написано, но не
+> протестировано**: идентификация через Staff, относительные даты, генерация через Mattermost,
+> Postgres на контуре (🔴 заблокирован правами юзера — ждёт DBA). Подробно — ROADMAP «Статус отладки».
 
 ## Технический стек
 
 | Компонент | Решение | Статус |
 |-----------|---------|--------|
-| Оркестрация | n8n (Docker, образ с `petrovich`) | ✅ Прод + локаль |
-| LLM диалога | **Claude Opus 4.8** (Anthropic API, облако) | ✅ |
-| Генерация документов | **Детерминированная** (без LLM): `petrovich` (склонение ФИО) + JS-склейки | ✅ v7 |
-| Интерфейс | **Telegram-бот** (Telegram Trigger + Send Message) | ✅ |
-| Стейт сессий | **Postgres Chat Memory** (sessionKey = chat_id) | ✅ |
-| Проверка сроков ст.193 | JS-калькулятор `calc_deadlines` (toolCode), **прямой тул на агенте** | ✅ |
-| PostgreSQL 16 | hr_assistant — память диалога + кейсы + доказательства (с байтами фото) | ✅ |
+| Оркестрация | n8n (внутри контура Контура, `n8n-common.testkontur.ru`) | ✅ Переезд |
+| LLM диалога | **KonturGPT** (`preview-pro`, OpenAI-совместимый, внутри контура) | ✅ Переезд |
+| Генерация документов | **Детерминированная** (без LLM): `petrovich` (склонение ФИО) + JS-склейки | ✅ |
+| Интерфейс | **Mattermost** (бот на `mmpy_bot` → webhook `/mattermost-in`; выход — `/api/v4/posts`) | ✅ Отлажен |
+| Идентификация сотрудников | **Staff API** (`/api/Users`, Bearer из Паспорта) — workflow «Идентификация пользователя» | ⚠️ Не тестирован |
+| Авторизация к API Контура | **Контур Паспорт** (OAuth client_credentials: Basic → access_token) | ✅ Отлажен |
+| Стейт сессий | **Postgres Chat Memory** (sessionKey = channel_id Mattermost) | ⚠️ Блокер БД |
+| Проверка сроков + даты | `calc_deadlines` (toolCode): относительные даты («вчера/сегодня») + сроки ст.193 | ⚠️ node-тест ок |
+| PostgreSQL | БД `n8n`, схема `hr_disciplinary_assistant` (host `devof-pt-vxsa1.dev.kontur.ru`) | 🔴 права DBA |
 | Шаблоны документов | **Google Drive (.docx с {{плейсхолдерами}})**, рендер через adm-zip | ✅ |
-| Скриншоты в СЗ | Фото из Telegram → `hr_evidence.file_b64` → вставка в .docx (OOXML) | ✅ v7 |
+| Скриншоты в СЗ | Фото → `hr_evidence.file_b64` → вставка в .docx (OOXML). В MM приём фото **отложен** | ⏸ Отложено |
 | Чеклист (knowledge) | **Google Drive (Google Doc), подгружается динамически** | ✅ |
-| Прод-хостинг | **Timeweb VPS (Нидерланды)**, Docker Compose: n8n + Postgres + Caddy | ✅ v7 |
-| HTTPS / webhook | **Caddy** (авто Let's Encrypt) на `hr-kontur.ru` | ✅ v7 |
-| Векторная БД (RAG) | TBD (см. ROADMAP P1.2 — Qdrant/pgvector) | ⚠️ Планируется |
+| Векторная БД (RAG) | TBD (см. ROADMAP — Qdrant/pgvector) | ⚠️ Планируется |
 | GitHub | https://github.com/Jojokora135791/hr-consultant | ✅ Публичный |
 
-> 🔒 **Anthropic геоблокирует РФ** (`api.anthropic.com` с РФ-IP → HTTP 403). Поэтому прод-сервер
-> в **Нидерландах** — оттуда Claude, Telegram и Google Drive доступны напрямую. Это **пилот/MVP на
-> условных данных** (реальные ПД сотрудников не гоняются). Для боевого использования с реальными
-> ПД — решение по 152-ФЗ (трансграничная передача) отдельно.
+> 🏢 **Переезд внутрь контура Контура (v8).** Раньше прод был в Нидерландах (Anthropic геоблочит РФ).
+> Теперь диалог на **KonturGPT** (внутренняя модель) → геоблок не мешает, n8n живёт внутри контура,
+> где доступны Mattermost и Staff. Пилот-деплой в Нидерландах (`deploy/`) — **legacy**, референс.
 
-> **Почему Claude в диалоге:** qwen2.5:7b путалась в нетиповых сценариях и криво вызывала
-> инструменты. Олег планирует менять модель (в т.ч. на РФ-LLM для 152-ФЗ).
+> **Почему Mattermost, а не Telegram:** заказчик (кадровый блок) утвердил единственный канал —
+> Mattermost (внутренний; TG отвергли по данным). У MM нет n8n-триггера, свой Node-WS рвался (1006),
+> поэтому вход — бот на **`mmpy_bot`** (Python, `bot/`), слушает WebSocket → POST в n8n webhook.
 
-> **Почему генерация без LLM:** qwen в генерации либо копировала вход на выход, либо ошибалась
-> (несогласованное склонение ФИО). Заменено на детерминированный код — быстрее, предсказуемо,
-> не требует Ollama/GPU вообще.
+> **Почему генерация без LLM:** qwen копировала вход/ошибалась в склонении ФИО. Заменено на
+> детерминированный код (petrovich + JS) — быстрее, предсказуемо, без GPU.
 
-## Архитектура v7 — два workflow
+## Архитектура v8 — три workflow
 
 ```
-HR-агент.json (точка входа)
+Mattermost (личка боту)
+    ↓  бот на mmpy_bot (bot/) слушает WebSocket, POST в webhook
+HR-агент.json → Webhook (/mattermost-in)
     ↓
-Telegram: входящие (Telegram Trigger, updates=message)
+Нормализация входа (Code: body.channel_id/user_id/message → chat_id = channel_id)
+    ↓  [фото через MM — отложено; телеграм-ветка отключена]
+HR-ассистент (AI Agent, KonturGPT preview-pro)
+    ├── Postgres память (Postgres Chat Memory, sessionKey = channel_id)
+    ├── Tool: calc_deadlines (toolCode) — относительные даты + сроки ст.193
+    ├── Tool: Идентификация пользователя → Идентификация пользователя.json (Staff)
+    └── Tool: generate_documents → Генерация документов.json
     ↓
-Нормализация входа TG (Code: text / photo + валидация фото)
+Формат ответа (Code: markdown как есть + разбивка ≤15000)
     ↓
-Есть фото? (IF)
-    ├ да → Telegram: скачать фото → Кодировать фото (base64) → Postgres: запись доказательства
-    │       (hr_evidence: file_id + file_b64) → HR-ассистент
-    └ нет → HR-ассистент
-    ↓
-HR-ассистент (AI Agent, Claude Opus 4.8 через Anthropic Chat Model)
-    ├── Postgres память (Postgres Chat Memory, sessionKey = chat_id, окно 30)
-    ├── Tool: calc_deadlines (toolCode/JS) — ПРЯМОЙ тул, проверка сроков ст.193
-    └── Tool: generate_documents → Генерация документов.json (toolWorkflow)
-    ↓
-Формат ответа (Code: markdown→HTML + разбивка на части ≤4096)
-    ↓
-Telegram: ответ (Send Message, parse_mode=HTML)
+Отправить сообщение (HTTP POST /api/v4/posts, channel_id + text)
+
+Идентификация пользователя.json (tool):
+    Trigger(subject/manager/witnesses) → Получение токена (Паспорт)
+    → Обращение в Стафф (поиск) (Code+this.helpers.httpRequest: q-поиск /api/Users)
+
+Постгрес-инициализация (Postgres_инициализация_схемы.json):
+    manual → 0.search_path → hr_cases → hr_evidence  (подергать вручную)
 ```
 
-**Поток диалога:** приветствие → сбор всех фактов под шаблоны (по одному вопросу) → суммаризация
-→ **проверка сроков** (ДО генерации) → подтверждение → генерация → выдача документами в Telegram.
+**Поток диалога:** приветствие → **идентификация сотрудника через Staff** (по email/логину) →
+сбор фактов (по одному вопросу) → суммаризация → **проверка сроков** (ДО генерации) →
+подтверждение → генерация → выдача документами в **Mattermost**.
 
 **Что собирает агент (под 25 плейсхолдеров):** ФИО/должность/подразделение сотрудника; даты
 отсутствия и обнаружения; время отсутствия; **город+адрес рабочего места**; попытки связи;
@@ -99,10 +107,10 @@ violationDeadline, discoveryDeadline }`. Агент НЕ считает даты
   → Vision: анализ доказательств (заглушка) ───────────────┐
   → Значения документов (Code: context → 25 плейсхолдеров + DOC_MAP флаги)
   → Объединить значения (Code: petrovich-склонение ФИО + обстоятельства + приложения)
-  → Статус: готовлю документы ⏳
-  → Нужен акт? (IF) → [Drive: скачать акт → Рендер акта (adm-zip) → Telegram: акт]
+  → Статус: готовлю документы ⏳ (Mattermost POST /api/v4/posts)
+  → Нужен акт? (IF) → [Drive: скачать акт → Рендер акта → MM: загрузить акт (/api/v4/files) → MM: пост акт]
   → Нужна СЗ? (IF) → [Postgres: фото кейса → Drive: скачать СЗ
-                      → Рендер СЗ (adm-zip + вставка скриншотов) → Telegram: СЗ]
+                      → Рендер СЗ (adm-zip) → MM: загрузить СЗ → MM: пост СЗ]
   → Финальный ответ → Postgres: запись кейса (hr_cases) → Вернуть результат
 
   ╎ ВЫКЛЮЧЕННЫЙ островок-задел под RAG (disabled, в обход):
@@ -130,14 +138,14 @@ violationDeadline, discoveryDeadline }`. Агент НЕ считает даты
 
 > ⚠️ Рендер требует n8n с `NODE_FUNCTION_ALLOW_EXTERNAL=adm-zip,petrovich`.
 
-**Скриншоты-доказательства в СЗ (v7):**
-- Фото из Telegram **скачивается** (нода `Telegram: скачать фото`) → base64 → пишется в
-  `hr_evidence.file_b64`.
-- При генерации СЗ: `Postgres: фото кейса` достаёт байты по `chat_id`; `Рендер СЗ` вставляет каждое
-  фото в .docx через **OOXML** (файл в `word/media/`, relationship, `<w:drawing>`), с подписью
-  «Скриншот N». Якорь — плейсхолдер `{{скриншоты}}` после `{{приложения}}`.
-- ⚠️ **Расширение media-файла должно быть в `[Content_Types].xml`** — иначе Word ругается «документ
-  повреждён». Сохраняем как `.jpeg` (он зарегистрирован) + нода регистрирует расширение при вставке.
+**Скриншоты-доказательства в СЗ (механика готова, приём фото в MM отложен):**
+- ⏸ В v8 (Mattermost) **приём фото отложен** (телеграм-ветка отключена). Ниже — как это работало
+  на Telegram и остаётся в `Рендер СЗ` под будущее подключение фото через MM (`/api/v4/files`).
+- Фото → base64 → `hr_evidence.file_b64`. При генерации СЗ `Postgres: фото кейса` достаёт байты по
+  `chat_id`; `Рендер СЗ` вставляет каждое фото в .docx через **OOXML** (`word/media/`, relationship,
+  `<w:drawing>`), подпись «Скриншот N», якорь `{{скриншоты}}`.
+- ⚠️ **Расширение media-файла должно быть в `[Content_Types].xml`** — иначе Word «документ повреждён».
+  Сохраняем как `.jpeg` + нода регистрирует расширение при вставке.
 
 **Вариативность документов (DOC_MAP).** В «Значения документов» карта
 `DOC_MAP = { scenario: { нужен_акт, нужна_сз } }`. Развилки `Нужен акт?` / `Нужна СЗ?` включают
@@ -170,21 +178,21 @@ violationDeadline, discoveryDeadline }`. Агент НЕ считает даты
 ```
 hr-consultant/
 ├── CLAUDE.md / ROADMAP.md
-├── db/schema.sql                      ← hr_cases, hr_evidence (+ file_b64)
-├── deploy/                            ← ПРОД: Docker-стек
-│   ├── Dockerfile                     ← n8n + petrovich
-│   ├── docker-compose.yml             ← n8n + Postgres + Caddy
-│   ├── Caddyfile                      ← reverse-proxy + авто-HTTPS
-│   ├── bootstrap.sh                   ← one-shot деплой (через веб-консоль/SSH)
-│   ├── .env.example                   ← переменные (DOMAIN, POSTGRES_*); .env в .gitignore
-│   └── README.md                      ← инструкция деплоя
+├── db/schema.sql                      ← hr_cases, hr_evidence (схема hr_disciplinary_assistant)
+├── bot/                               ← Mattermost-бот (mmpy_bot, Python): WS → n8n webhook
+│   ├── bot.py / plugin.py             ← вход: ловит ЛС, POST в /mattermost-in
+│   ├── requirements.txt / Dockerfile / .env.example
+├── deploy/                            ← LEGACY: Docker-стек Нидерланды (Anthropic). Референс, не используется
 ├── knowledge/                         ← исходники контента (чеклист, ст.193)
 ├── templates/                         ← .docx-шаблоны (копия Drive) с {{плейсхолдерами}}
+├── meetings/                          ← конспекты встреч с заказчиком
 ├── memory/                            ← контекст проекта для Claude Code
 ├── ТЗ БП/                             ← бизнес-знания (не трогать)
 └── n8n/workflows/
-    ├── HR-агент.json                  ← Telegram + AI Agent (Claude) + сроки + фото
-    ├── Генерация документов.json      ← детерминированная генерация + рендер .docx + скриншоты
+    ├── HR-агент.json                  ← Mattermost webhook + AI Agent (KonturGPT) + сроки + идентификация
+    ├── Генерация документов.json      ← детерминированная генерация + рендер .docx + отправка в MM
+    ├── Идентификация пользователя.json ← Staff API (токен из Паспорта) → данные сотрудников
+    ├── Postgres_инициализация_схемы.json ← создать таблицы в схеме (подергать вручную)
     └── Тест-docx-рендер.json          ← изолированный стенд для отладки рендера
 ```
 
@@ -198,42 +206,37 @@ hr-consultant/
 
 ## Настройка и запуск
 
-### ПРОД (Timeweb VPS, Нидерланды) — Docker
+### Среда (v8): n8n внутри контура Контура
+n8n живёт на `n8n-common.testkontur.ru` (общий инстанс). Диалог — KonturGPT (внутри контура),
+Mattermost/Staff/Паспорт доступны напрямую. Внешний деплой (Нидерланды) больше не нужен.
 
-Весь деплой — в `deploy/`. One-shot (на сервере, по SSH или веб-консоль Timeweb):
+### Mattermost-бот (вход) — локально или в контейнере
 ```bash
-DOMAIN=hr-kontur.ru POSTGRES_PASSWORD=ПАРОЛЬ \
-  bash <(curl -fsSL https://raw.githubusercontent.com/Jojokora135791/hr-consultant/main/deploy/bootstrap.sh)
+cd bot
+python3 -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+MM_BOT_TOKEN='...' N8N_WEBHOOK_URL='https://n8n-common.testkontur.ru/webhook/mattermost-in' \
+  MM_SSL_VERIFY=false python bot.py
 ```
-Поднимает n8n + Postgres + Caddy (авто-HTTPS). Подробно — `deploy/README.md`.
-
-> ⚠️ Сервер должен быть **не в РФ** (Anthropic блочит РФ-IP). На 1 ГБ RAM нужен **swap**
-> (bootstrap добавляет 2 ГБ) и **зеркало Docker Hub** (`mirror.gcr.io`) против rate-limit.
-
-### Локаль (для разработки)
-```bash
-brew services start postgresql@16
-cloudflared tunnel --url http://localhost:5678              # webhook для Telegram
-NODE_FUNCTION_ALLOW_EXTERNAL=adm-zip,petrovich NODE_PATH=~/.npm-global/lib/node_modules \
-  WEBHOOK_URL=https://<туннель> n8n start
-```
-> ⚠️ `petrovich` локально: task-runner n8n ищет модули в системных путях. Поставить
-> `sudo cp -R ~/.npm-global/lib/node_modules/petrovich /usr/local/lib/node_modules/`, иначе нода
-> работает на JS-fallback (склонение чуть хуже на экзотике, но не падает).
-> ⚠️ cloudflared quick-туннель нестабилен (рвётся, DNS-сюрпризы) — для прода НЕ годится.
+> ⚠️ Python 3.14: нужен ручной `asyncio.new_event_loop()` до `bot.run()` (уже в `bot.py`).
+> Бот ловит ЛС (`direct_only`) → POST в n8n. Ответ постит сам n8n (нода `/api/v4/posts`).
 
 ### Credentials в n8n (UI)
-- **Anthropic** — API Key, Base URL `https://api.anthropic.com`.
-- **Telegram** — токен от @BotFather.
-- **Postgres** — прод: `host=postgres` (имя сервиса в Docker-сети), db `hr_assistant`, user `postgres`;
-  локаль: `host=localhost`, user `olegkluev`.
-- **Google Drive (Service Account)** `N8N-kontur` — только чтение. Шаблоны и чеклист расшарить на e-mail SA.
+- **KonturGPT** (`Kontur.GPT`, openAiApi) — внутренняя модель, `preview-pro`.
+- **Контур. Mattermost** (httpBearerAuth) — токен бота. Для входящих/исходящих `/api/v4/*`.
+- **Контур. Паспорт** (httpHeaderAuth) — `Authorization: Basic base64(clientId:clientSecret)`; на ноде «Получение токена».
+- **n8n_hr_disciplinary_assistant** (Postgres) — host `devof-pt-vxsa1.dev.kontur.ru`, db `n8n`,
+  схема `hr_disciplinary_assistant`, **SSL = disable** (сервер не отдаёт TLS). 🔴 нужны права от DBA.
+- **Google Drive (Service Account)** `N8N-kontur` — только чтение; шаблоны/чеклист расшарить на e-mail SA.
 
 ### Импорт workflow
-1. `Генерация документов.json` → проверить credentials (Telegram, Postgres, Google Drive).
-2. `HR-агент.json` → проверить Anthropic на `Anthropic Chat Model`, Telegram, Postgres.
-3. В ноде `Генерация документов` (tool в HR-агенте) — `workflowId` указывает на импортированную «Генерацию».
-4. Активировать оба → бот заработает.
+1. Импортировать все 4: `HR-агент`, `Генерация документов`, `Идентификация пользователя`, `Postgres_инициализация_схемы`.
+2. Проверить/перепривязать credentials (при импорте отвязываются): KonturGPT, Mattermost, Паспорт, Postgres, Drive.
+3. Перепривязать `workflowId` у tools в HR-агенте: `generate_documents` → «Генерация», `Идентификация пользователя` → её workflow.
+4. Прогнать `Postgres_инициализация_схемы` (создать таблицы; ждёт прав DBA).
+5. Активировать `HR-агент` (webhook `/mattermost-in`), в боте убрать `-test` из URL.
+
+> ⚠️ Рендер требует n8n с `NODE_FUNCTION_ALLOW_EXTERNAL=adm-zip,petrovich` (в контуре — уточнить у инфры).
 
 ## Как добавить новый сценарий
 
@@ -262,11 +265,12 @@ NODE_FUNCTION_ALLOW_EXTERNAL=adm-zip,petrovich NODE_PATH=~/.npm-global/lib/node_
 
 | Вопрос | К кому | Статус |
 |--------|--------|--------|
-| 152-ФЗ для боевого прода (Claude + Drive = ПД за границу) | Клюев О. + ИБ | Открыто (пилот на условных данных) |
-| Замена модели диалога (в т.ч. на РФ-LLM) | Клюев О. | Планируется |
+| 🔴 **Права Postgres-юзера** (GRANT USAGE,CREATE на схему; ALTER ROLE search_path) | DBA Контура | БЛОКЕР |
+| 🔴 **pg_hba: плавающие IP подов n8n** (10.216/10.218/10.220.x) → whitelist подсетей | DBA/инфра | БЛОКЕР |
+| Живой тест: идентификация Staff, относительные даты, генерация в MM | Клюев О. | Не тестировано |
+| Приём фото-доказательств через Mattermost (`/api/v4/files`) | Клюев О. | Отложено |
 | Буферные сроки (5 мес 15 дн / 20 дн) — подтвердить | Касмынина О. | Уточнить |
-| Шаблоны акта (DS-03) / СЗ (DS-04) — утверждённые | Черепанова / Касмынина | Получить |
+| Шаблоны акта / СЗ — утверждённые | Черепанова / Касмынина | Получить |
 | `{{скриншоты}}` + `{{фио_работника_дат}}` в Drive-шаблоне СЗ | Клюев О. | Прописать в Drive |
-| RAG-AAS ЦИИ интеграция | Вова Поздняков | Июль 2026 |
-| Vision-модель для анализа скриншотов | Клюев О. | Заглушка (ROADMAP P1.3) |
-| Векторная БД для knowledge/ | Клюев О. | ROADMAP P1.2 |
+| Фактура встречи №1 (3 свидетеля, последствия, время ТД…) — M4 | Клюев О. | ROADMAP M4 |
+| RAG / Vision / векторная БД | Клюев О. / Вова Поздняков | ROADMAP (позже) |

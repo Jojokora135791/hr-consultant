@@ -1,0 +1,2 @@
+mmpy_bot>=2.0.0
+aiohttp>=3.9

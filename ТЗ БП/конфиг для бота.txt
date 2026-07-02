@@ -1,0 +1,22 @@
+import asyncio
+from mmpy_bot import Bot, Settings
+from my_plugin import MyPlugin
+
+# Создаём и устанавливаем цикл событий для основного потока
+loop = asyncio.new_event_loop()
+asyncio.set_event_loop(loop)
+
+bot = Bot(
+    settings=Settings(
+        MATTERMOST_URL="https://chat.skbkontur.ru", # URL вашего сервера
+        BOT_TOKEN=               # Токен, сохраненный ранее
+        BOT_TEAM="Kontur",         # Команда, где работает бот
+        SSL_VERIFY=False,                          # Отключить проверку SSL, если сертификат самоподписанный
+        WEBHOOK_HOST_ENABLED=True,                 # Включаем вебхук-сервер
+        WEBHOOK_HOST_URL="http://127.0.0.1",       # URL для вебхук-сервера
+        WEBHOOK_HOST_PORT=8080,                    # Порт для вебхук-сервера
+        DEBUG=True                                 # Включаем подробное логирование
+    ),
+    plugins=[MyPlugin()],
+)
+bot.run()
