@@ -420,22 +420,6 @@
     },
     {
       "parameters": {
-        "content": "**👁️ Разбор фото (заглушка)**\n\nПока не умеет «смотреть» на фото-доказательства — просто берёт текстовое описание, которое дал руководитель.\n\n_Техника: STUB, передаёт evidenceDescription как analysis. Заменить на HTTP к qwen2-vl/llava._",
-        "height": 250,
-        "width": 216,
-        "color": 3
-      },
-      "id": "fa666d43-8f04-481f-8bc3-a1e6e2330492",
-      "name": "          ",
-      "type": "n8n-nodes-base.stickyNote",
-      "typeVersion": 1,
-      "position": [
-        -352,
-        2192
-      ]
-    },
-    {
-      "parameters": {
         "content": "**❓ Какие документы делать**\n\nРазвилка: смотрит, нужен ли в этом сценарии акт и нужна ли служебная записка — и включает только нужное.\n\n_Техника: IF по флагам `нужен_акт` / `нужна_сз` из DOC_MAP._",
         "height": 234,
         "width": 408,
@@ -480,19 +464,6 @@
       "position": [
         -1376,
         2576
-      ]
-    },
-    {
-      "parameters": {
-        "jsCode": "// VISION STUB v1 — TODO: заменить на HTTP Request к vision-модели Ollama (qwen2-vl / llava)\n// Интерфейс: принимает evidenceDescription, возвращает { vision_stub, analysis }\n// При замене: убрать этот нод, добавить HTTP Request к http://127.0.0.1:11434/api/generate\n// с моделью qwen2-vl и base64-изображением в поле images[]\nconst d = $input.first().json;\nconst desc = d.context?.evidenceDescription || 'Доказательства не предоставлены';\nreturn [{ json: {\n  ...d,\n  vision_analysis: {\n    vision_stub: true,\n    analysis: desc,\n    _note: 'STUB: заменить на реальную vision-модель Ollama'\n  }\n} }];"
-      },
-      "id": "3d937d53-7b0b-4c70-8624-bbf6fc9040fd",
-      "name": "Vision: анализ доказательств (заглушка)",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        -304,
-        2480
       ]
     },
     {
@@ -1094,17 +1065,6 @@
       ]
     },
     "Нормализовать данные": {
-      "main": [
-        [
-          {
-            "node": "Vision: анализ доказательств (заглушка)",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Vision: анализ доказательств (заглушка)": {
       "main": [
         [
           {
