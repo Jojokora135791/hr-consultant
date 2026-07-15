@@ -1,9 +1,11 @@
 -- HR-консультант — схема Postgres
 -- Прод Контура: БД `n8n`, схема `hr_disciplinary_assistant` (host devof-pt-vxsa1.dev.kontur.ru).
--- Применить: psql -d n8n -f db/schema.sql   (или через workflow «Postgres: инициализация схемы»)
+-- Применить: psql -d n8n -f db/schema.sql
 --
 -- Таблица n8n_chat_histories (память диалога) создаётся автоматически нодой
 -- "Postgres Chat Memory" — здесь её НЕ объявляем.
+-- Таблица staff_users (кэш Стаффа) создаётся нодой «PG: init staff_users» внутри
+-- workflow «Идентификация пользователя.json» — здесь тоже не объявляем.
 
 CREATE SCHEMA IF NOT EXISTS hr_disciplinary_assistant;
 
@@ -41,3 +43,15 @@ CREATE TABLE IF NOT EXISTS hr_disciplinary_assistant.hr_evidence (
 );
 
 CREATE INDEX IF NOT EXISTS idx_hr_evidence_chat_id ON hr_disciplinary_assistant.hr_evidence (chat_id);
+
+-- Ответы руководителя по пунктам чек-листа сценария (Шаг 5 промпта, tool scenario_checklist).
+CREATE TABLE IF NOT EXISTS hr_disciplinary_assistant.hr_checklist_answers (
+    id          SERIAL PRIMARY KEY,
+    chat_id     TEXT        NOT NULL,
+    scenario    TEXT        NOT NULL,
+    item        TEXT        NOT NULL,   -- текст пункта чек-листа дословно
+    done        BOOLEAN,
+    comment     TEXT,
+    updated_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE (chat_id, item)
+);

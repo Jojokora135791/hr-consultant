@@ -11,7 +11,7 @@
       "type": "n8n-nodes-base.executeWorkflowTrigger",
       "position": [
         -736,
-        240
+        224
       ]
     },
     {
@@ -37,8 +37,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.1,
       "position": [
-        -512,
-        240
+        -528,
+        224
       ],
       "credentials": {
         "httpHeaderAuth": {
@@ -49,85 +49,33 @@
     },
     {
       "parameters": {
-        "operation": "executeQuery",
-        "query": "SELECT staff_id, sid, login, email, firstname, surname, patronymic, post, town,\n       office_id AS \"officeId\", office_title AS \"officeTitle\",\n       inner_phone AS \"innerPhone\", mobile_phone AS \"mobilePhone\",\n       status_id AS \"statusId\", status, birthday, photo_path AS \"photoPath\"\nFROM hr_disciplinary_assistant.staff_users;",
-        "options": {}
+        "content": "### Получаем токен в Паспорте\nВ ответе будет:\n- access_token - токен безопасности\n- token_type - тип токена\n- expires_in - время жизни токена, в секундах\n- scope",
+        "height": 192,
+        "width": 288
       },
-      "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2.6,
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
       "position": [
-        -288,
-        240
+        -656,
+        432
       ],
-      "id": "350ab37e-46fb-434b-9b4c-12bb87c9cd63",
-      "name": "Ранее сохраненные пользователи",
-      "alwaysOutputData": true,
-      "credentials": {
-        "postgres": {
-          "id": "31G0c3e8sLXWZIif",
-          "name": "n8n_hr_disciplinary_assistant"
-        }
-      }
+      "id": "70a9a368-bef6-4da9-a4a3-25f84fc89a69",
+      "name": "Sticky Note1"
     },
     {
       "parameters": {
-        "jsCode": "// Поиск участников по кэшу (Postgres staff_users) — ПО ОДНОМУ ITEM НА ЧЕЛОВЕКА.\n// ВХОД (из триггера, passthrough): subject, manager, witness1..witness3 (любое подмножество).\n// ВЫХОД: item на каждого заполненного участника:\n//   найден:    { role, query, found: true, staff_id, fio, post, city, office, email, login, source: 'cache' }\n//   не найден: { role, query, found: false, debug: {...} } — debug показывает, что реально пришло из кэша.\nconst src = $('When Executed by Another Workflow').first().json || {};\nconst rows = $input.all().map(i => i.json || {});\nconst cache = rows.filter(r => r && (r.email || r.login || r.staff_id));\n\nconst norm = s => String(s == null ? '' : s).trim();\nconst low = s => norm(s).toLowerCase();\nconst fio = u => [u.surname, u.firstname, u.patronymic].filter(Boolean).join(' ');\n\nconst ROLES = ['subject', 'manager', 'witness1', 'witness2', 'witness3'];\nconst targets = ROLES.map(role => ({ role, query: norm(src[role]) })).filter(t => t.query);\n\nfunction findInCache(query) {\n  const q = low(query);\n  const qLocal = q.includes('@') ? q.split('@')[0] : q.replace(/^kontur\\\\/, '');\n  return cache.find(r => {\n    const e = low(r.email);\n    const l = low(r.login);\n    const lLocal = l.replace(/^kontur\\\\/, '');\n    return (!!e && (e === q || e.split('@')[0] === qLocal)) ||\n           (!!l && (l === q || lLocal === q || lLocal === qLocal)) ||\n           (/^\\d+$/.test(q) && String(r.staff_id) === q);\n  }) || null;\n}\n\n// диагностика состояния кэша — цепляется к каждому ненайденному\nconst debug = {\n  cache_total: rows.length,\n  cache_usable: cache.length,\n  with_email: cache.filter(r => norm(r.email)).length,\n  with_login: cache.filter(r => norm(r.login)).length,\n  email_samples: cache.map(r => r.email).filter(Boolean).slice(0, 3),\n  first_row_keys: Object.keys(rows[0] || {})\n};\n\nreturn targets.map(t => {\n  const u = findInCache(t.query);\n  return { json: u\n    ? { role: t.role, query: t.query, found: true,\n        staff_id: u.staff_id, fio: fio(u), post: u.post || null,\n        city: u.town || null, office: u.officeTitle || null,\n        email: u.email || null, login: u.login || null, source: 'cache' }\n    : { role: t.role, query: t.query, found: false, debug }\n  };\n});\n"
+        "content": "## Приложение\nВ Контур Паспорт **SherpaRPAapp** создано приложение и от него получены креды:\n- ClientId\n- ClientSecret\n\nhttps://passport.skbkontur.ru/apps/manage/SherpaHROrdersAPP\n\n### Авторизация в паспорте\n\nНужно в заголовке передать ключ `Authorization` со значением `Basic value`, где `value` формируется кодированием в base64 строки из clientId и clientSecret, разделенных двоеточием - base64(clientId:clientSecret).\n\nНа маке это команда в терминале:\n`echo -n \"твоя строка\" | base64`",
+        "height": 368,
+        "width": 448
       },
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
       "position": [
-        -48,
-        240
+        -608,
+        -224
       ],
-      "id": "14b2219c-7795-4a3d-b615-b400cc1fa7e7",
-      "name": "Поиск нужных по массиву"
-    },
-    {
-      "parameters": {
-        "conditions": {
-          "options": {
-            "caseSensitive": true,
-            "leftValue": "",
-            "typeValidation": "strict",
-            "version": 2
-          },
-          "conditions": [
-            {
-              "id": "cond-found-person",
-              "leftValue": "={{ $json.found }}",
-              "rightValue": "",
-              "operator": {
-                "type": "boolean",
-                "operation": "true",
-                "singleValue": true
-              }
-            }
-          ],
-          "combinator": "and"
-        },
-        "options": {}
-      },
-      "type": "n8n-nodes-base.if",
-      "typeVersion": 2.2,
-      "position": [
-        160,
-        240
-      ],
-      "id": "24765249-93f2-4ab3-a542-1772049467b0",
-      "name": "Найден в кэше?"
-    },
-    {
-      "parameters": {
-        "jsCode": "// Сводим всех не найденных в кэше в ОДИН item —\n// чтобы выкачка Стаффа и upsert выполнились один раз, а не по разу на человека.\nconst missing = $input.all()\n  .map(i => i.json || {})\n  .filter(p => p && p.query)\n  .map(p => ({ role: p.role, query: p.query }));\n\nif (!missing.length) return [];\nreturn [{ json: { missing } }];\n"
-      },
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        336,
-        464
-      ],
-      "id": "c4000001-0000-4000-8000-000000000001",
-      "name": "Собрать отсутствующих"
+      "id": "fe29876a-18bf-4cee-964a-e319eaeb2d0d",
+      "name": "Sticky Note3"
     },
     {
       "parameters": {
@@ -137,7 +85,7 @@
           "parameters": [
             {
               "name": "view",
-              "value": "light"
+              "value": "large"
             },
             {
               "name": "$top",
@@ -174,24 +122,71 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.4,
       "position": [
-        528,
-        464
+        544,
+        336
       ],
-      "id": "4f4a1917-5a51-47ec-ad7e-7a678bdc1550",
+      "id": "a6f037cf-4dda-46e2-9e4d-c26a2203bad3",
       "name": "Обращение в Стафф. Получение данных по всем"
     },
     {
       "parameters": {
-        "jsCode": "// Упаковываем ВЕСЬ список Стаффа в один item для батч-upsert'а в Postgres.\n// Дедуп по id. Если ни у одного item нет id — возвращаем диагностику вместо тишины.\nconst items = $input.all().map(i => i.json || {});\n\nconst pickId = u => u.id ?? u.userId ?? u.staffId ?? u.staff_id ?? null;\n\nconst seen = new Set();\nconst users = [];\nfor (const u of items) {\n  const id = pickId(u);\n  if (id == null || seen.has(id)) continue;\n  seen.add(id);\n  users.push({\n    id,\n    sid: u.sid ?? null, login: u.login ?? null, email: u.email ?? null,\n    firstname: u.firstname ?? null, surname: u.surname ?? null, patronymic: u.patronymic ?? null,\n    post: u.post ?? null,\n    officeTown: (u.officeItem && u.officeItem.town) ?? null,\n    officeId: (u.officeItem && u.officeItem.id) ?? null,\n    officeTitle: (u.officeItem && u.officeItem.title) ?? null,\n    innerPhone: u.innerPhone ?? null, mobilePhone: u.mobilePhone ?? null,\n    statusId: u.statusId ?? null, status: u.status ?? null,\n    birthday: u.birthday ?? null, photoPath: u.photoPath ?? null\n  });\n}\n\n// диагностика: пришло много item'ов, но ни одного id — показываем структуру первого\nif (!users.length) {\n  const first = items[0] || {};\n  return [{ json: {\n    error: 'no_id_field',\n    items_total: items.length,\n    first_item_keys: Object.keys(first),\n    hint: 'Проверь view у «Обращение в Стафф» (нужен light) или где реально лежит id'\n  } }];\n}\n\nreturn [{ json: { users_json: JSON.stringify(users), count: users.length } }];\n"
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "cond-found-person",
+              "leftValue": "={{ $json.found }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        144,
+        224
+      ],
+      "id": "9f7980ba-153b-4cd2-82aa-a4a6425667cf",
+      "name": "Найден в кэше?"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Сводим всех не найденных в кэше в ОДИН item —\n// чтобы выкачка Стаффа и upsert выполнились один раз, а не по разу на человека.\nconst missing = $input.all()\n  .map(i => i.json || {})\n  .filter(p => p && p.query)\n  .map(p => ({ role: p.role, query: p.query }));\n\nif (!missing.length) return [];\nreturn [{ json: { missing } }];\n"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        736,
-        464
+        352,
+        336
       ],
-      "id": "3b2bdc6a-8bce-4cc9-8aa0-bd021208fda2",
-      "name": "Стафф: пакет для SQL"
+      "id": "e817d4fd-f9bc-474f-b1ae-7fd19a031c85",
+      "name": "Собрать отсутствующих"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Из свежего полного списка Стаффа отбираем тех, кого не было в кэше.\n// ВЫХОД: item на найденного: { role, query, staff_id, source: 'staff' } — вид для «Подготовки запросов профилей».\n// Кого нет и в Стаффе — отбрасываем (финальная сборка пометит их not_found).\nconst all = $('Обращение в Стафф. Получение данных по всем').all().map(i => i.json || {});\nconst wanted = ($('Собрать отсутствующих').first().json || {}).missing || [];\n\nconst norm = s => String(s == null ? '' : s).trim();\nconst low = s => norm(s).toLowerCase();\n\nfunction findInList(query) {\n  const q = low(query);\n  const qLocal = q.includes('@') ? q.split('@')[0] : q.replace(/^kontur\\\\/, '');\n  return all.find(r => {\n    const e = low(r.email);\n    const l = low(r.login);\n    const lLocal = l.replace(/^kontur\\\\/, '');\n    return (!!e && (e === q || e.split('@')[0] === qLocal)) ||\n           (!!l && (l === q || lLocal === q || lLocal === qLocal)) ||\n           (/^\\d+$/.test(q) && String(r.id) === q);\n  }) || null;\n}\n\nreturn wanted\n  .map(t => {\n    const u = findInList(t.query);\n    return u ? { json: { role: t.role, query: t.query, staff_id: u.id, source: 'staff' } } : null;\n  })\n  .filter(Boolean);\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1136,
+        336
+      ],
+      "id": "a953d8ad-a66c-4f53-a724-8b1b8add274b",
+      "name": "Отобрать нужных"
     },
     {
       "parameters": {
@@ -204,10 +199,10 @@
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.6,
       "position": [
-        912,
-        464
+        944,
+        336
       ],
-      "id": "c7aca9e5-c07a-455b-a2fc-185f0b37d9a5",
+      "id": "bf2fea5b-1e2f-40ff-a350-05bd4b38169d",
       "name": "Сохранить в кэш",
       "credentials": {
         "postgres": {
@@ -218,30 +213,64 @@
     },
     {
       "parameters": {
-        "jsCode": "// Из свежего полного списка Стаффа отбираем тех, кого не было в кэше.\n// ВЫХОД: item на найденного: { role, query, staff_id, source: 'staff' }.\n// Кого нет и в Стаффе — отбрасываем (агент трактует отсутствие в ответе как not_found).\nconst all = $('Обращение в Стафф. Получение данных по всем').all().map(i => i.json || {});\nconst wanted = ($('Собрать отсутствующих').first().json || {}).missing || [];\n\nconst norm = s => String(s == null ? '' : s).trim();\nconst low = s => norm(s).toLowerCase();\n\nfunction findInList(query) {\n  const q = low(query);\n  const qLocal = q.includes('@') ? q.split('@')[0] : q.replace(/^kontur\\\\/, '');\n  return all.find(r => {\n    const e = low(r.email);\n    const l = low(r.login);\n    const lLocal = l.replace(/^kontur\\\\/, '');\n    return (!!e && (e === q || e.split('@')[0] === qLocal)) ||\n           (!!l && (l === q || lLocal === q || lLocal === qLocal)) ||\n           (/^\\d+$/.test(q) && String(r.id) === q);\n  }) || null;\n}\n\nreturn wanted\n  .map(t => {\n    const u = findInList(t.query);\n    return u ? { json: { role: t.role, query: t.query, staff_id: u.id, source: 'staff' } } : null;\n  })\n  .filter(Boolean);\n"
+        "operation": "executeQuery",
+        "query": "SELECT staff_id, sid, login, email, firstname, surname, patronymic, post, town,\n       office_id AS \"officeId\", office_title AS \"officeTitle\",\n       inner_phone AS \"innerPhone\", mobile_phone AS \"mobilePhone\",\n       status_id AS \"statusId\", status, birthday, photo_path AS \"photoPath\"\nFROM hr_disciplinary_assistant.staff_users;",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        -272,
+        224
+      ],
+      "id": "028c2fa6-01a8-44ab-9f35-d9c1fa598b6c",
+      "name": "Ранее сохраненные пользователи",
+      "alwaysOutputData": true,
+      "credentials": {
+        "postgres": {
+          "id": "31G0c3e8sLXWZIif",
+          "name": "n8n_hr_disciplinary_assistant"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Упаковываем ВЕСЬ список Стаффа в один item для батч-upsert'а в Postgres.\n// Дедуп по id. Если ни у одного item нет id — возвращаем диагностику вместо тишины.\nconst items = $input.all().map(i => i.json || {});\n\nconst pickId = u => u.id ?? u.userId ?? u.staffId ?? u.staff_id ?? null;\n\nconst seen = new Set();\nconst users = [];\nfor (const u of items) {\n  const id = pickId(u);\n  if (id == null || seen.has(id)) continue;\n  seen.add(id);\n  users.push({\n    id,\n    sid: u.sid ?? null, login: u.login ?? null, email: u.email ?? null,\n    firstname: u.firstname ?? null, surname: u.surname ?? null, patronymic: u.patronymic ?? null,\n    post: u.post ?? null,\n    officeTown: (u.officeItem && u.officeItem.town) ?? null,\n    officeId: (u.officeItem && u.officeItem.id) ?? null,\n    officeTitle: (u.officeItem && u.officeItem.title) ?? null,\n    innerPhone: u.innerPhone ?? null, mobilePhone: u.mobilePhone ?? null,\n    statusId: u.statusId ?? null, status: u.status ?? null,\n    birthday: u.birthday ?? null, photoPath: u.photoPath ?? null\n  });\n}\n\n// диагностика: пришло много item'ов, но ни одного id — показываем структуру первого\nif (!users.length) {\n  const first = items[0] || {};\n  return [{ json: {\n    error: 'no_id_field',\n    items_total: items.length,\n    first_item_keys: Object.keys(first),\n    hint: 'Проверь view у «Обращение в Стафф» (нужен light) или где реально лежит id'\n  } }];\n}\n\nreturn [{ json: { users_json: JSON.stringify(users), count: users.length } }];\n"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1088,
-        464
+        752,
+        336
       ],
-      "id": "4684141f-7085-449b-89ba-364f7d746379",
-      "name": "Отобрать нужных"
+      "id": "fe1bb1dc-5a3f-4d43-8c6e-8512c1fed554",
+      "name": "Стафф: пакет для SQL"
     },
     {
       "parameters": {
-        "mode": "append",
-        "numberInputs": 2
+        "jsCode": "// Поиск участников по кэшу (Postgres staff_users) — ПО ОДНОМУ ITEM НА ЧЕЛОВЕКА.\n// ВХОД (из триггера, passthrough): subject, manager, witness1..witness3 (любое подмножество).\n// ВЫХОД: item на каждого заполненного участника:\n//   найден:    { role, query, found: true, staff_id, fio, post, city, office, email, login, source: 'cache' }\n//   не найден: { role, query, found: false, debug: {...} } — debug показывает, что реально пришло из кэша.\nconst src = $('When Executed by Another Workflow').first().json || {};\nconst rows = $input.all().map(i => i.json || {});\nconst cache = rows.filter(r => r && (r.email || r.login || r.staff_id));\n\nconst norm = s => String(s == null ? '' : s).trim();\nconst low = s => norm(s).toLowerCase();\nconst fio = u => [u.surname, u.firstname, u.patronymic].filter(Boolean).join(' ');\n\nconst ROLES = ['subject', 'manager', 'witness1', 'witness2', 'witness3'];\nconst targets = ROLES.map(role => ({ role, query: norm(src[role]) })).filter(t => t.query);\n\nfunction findInCache(query) {\n  const q = low(query);\n  const qLocal = q.includes('@') ? q.split('@')[0] : q.replace(/^kontur\\\\/, '');\n  return cache.find(r => {\n    const e = low(r.email);\n    const l = low(r.login);\n    const lLocal = l.replace(/^kontur\\\\/, '');\n    return (!!e && (e === q || e.split('@')[0] === qLocal)) ||\n           (!!l && (l === q || lLocal === q || lLocal === qLocal)) ||\n           (/^\\d+$/.test(q) && String(r.staff_id) === q);\n  }) || null;\n}\n\n// диагностика состояния кэша — цепляется к каждому ненайденному\nconst debug = {\n  cache_total: rows.length,\n  cache_usable: cache.length,\n  with_email: cache.filter(r => norm(r.email)).length,\n  with_login: cache.filter(r => norm(r.login)).length,\n  email_samples: cache.map(r => r.email).filter(Boolean).slice(0, 3),\n  first_row_keys: Object.keys(rows[0] || {})\n};\n\nreturn targets.map(t => {\n  const u = findInCache(t.query);\n  return { json: u\n    ? { role: t.role, query: t.query, found: true,\n        staff_id: u.staff_id, fio: fio(u), post: u.post || null,\n        city: u.town || null, office: u.officeTitle || null,\n        email: u.email || null, login: u.login || null, source: 'cache' }\n    : { role: t.role, query: t.query, found: false, debug }\n  };\n});\n"
       },
-      "type": "n8n-nodes-base.merge",
-      "typeVersion": 3.2,
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
       "position": [
-        1312,
-        240
+        -64,
+        224
       ],
-      "id": "c4000002-0000-4000-8000-000000000002",
-      "name": "Слить ветки"
+      "id": "f8b975df-352f-4162-ac36-0e8eba09118e",
+      "name": "Поиск нужных по массиву"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Собираем расширенные профили: один плоский человек на item —\n// та же форма, что после кэша, + department/organization/status из departmentItems.\n// Контекст (role/query/source) берём из «Слить ветки», матчим по staff_id.\nconst ctxItems = $('Поиск данных по конкретным пользователям').all().map(i => i.json || {});\nconst resp = $input.all().map(i => i.json || {});\n\nconst fio = p => [p.surname, p.firstname, p.patronymic].filter(Boolean).join(' ');\nconst byId = new Map(ctxItems.map(p => [String(p.staff_id), p]));\n\nreturn resp.map((p, i) => {\n  const ctx = (p && p.id != null && byId.get(String(p.id))) || ctxItems[i] || {};\n  // ответ с ошибкой (onError: continueRegularOutput) или без id — отдаём как ненайденного\n  if (!p || p.id == null) {\n    const msg = (p && ((p.error && p.error.message) || p.message)) || 'нет ответа профиля';\n    return { json: { role: ctx.role || null, query: ctx.query || null, staff_id: ctx.staff_id || null,\n                     found: false, error: 'staff_error: ' + msg } };\n  }\n  const dep = (p.departmentItems && p.departmentItems[0]) || {};\n  return { json: {\n    role: ctx.role || null, query: ctx.query || null, found: true,\n    staff_id: p.id, fio: fio(p),\n    surname: p.surname || null, firstname: p.firstname || null, patronymic: p.patronymic || null,\n    post: p.post || null,\n    department: dep.title || null,\n    organization: dep.organizationName || null,\n    city: (p.officeItem && p.officeItem.town) || null,\n    office: (p.officeItem && p.officeItem.title) || null,\n    email: p.email || null, login: p.login || null, status: p.status || null,\n    source: ctx.source || null\n  } };\n});\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1504,
+        208
+      ],
+      "id": "444af60b-c2fc-40f4-9351-a3c9c030a566",
+      "name": "Профили: собрать ответ"
     },
     {
       "parameters": {
@@ -260,8 +289,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.4,
       "position": [
-        1520,
-        240
+        1328,
+        208
       ],
       "id": "96c9a0db-1020-423b-ad62-4c7c08c9473f",
       "name": "Поиск данных по конкретным пользователям",
@@ -269,103 +298,32 @@
     },
     {
       "parameters": {
-        "jsCode": "// Собираем расширенные профили: один плоский человек на item —\n// та же форма, что после кэша, + department/organization/status из departmentItems.\n// Контекст (role/query/source) берём из «Слить ветки», матчим по staff_id.\nconst ctxItems = $('Слить ветки').all().map(i => i.json || {});\nconst resp = $input.all().map(i => i.json || {});\n\nconst fio = p => [p.surname, p.firstname, p.patronymic].filter(Boolean).join(' ');\nconst byId = new Map(ctxItems.map(p => [String(p.staff_id), p]));\n\nreturn resp.map((p, i) => {\n  const ctx = (p && p.id != null && byId.get(String(p.id))) || ctxItems[i] || {};\n  // ответ с ошибкой (onError: continueRegularOutput) или без id — отдаём как ненайденного\n  if (!p || p.id == null) {\n    const msg = (p && ((p.error && p.error.message) || p.message)) || 'нет ответа профиля';\n    return { json: { role: ctx.role || null, query: ctx.query || null, staff_id: ctx.staff_id || null,\n                     found: false, error: 'staff_error: ' + msg } };\n  }\n  const dep = (p.departmentItems && p.departmentItems[0]) || {};\n  return { json: {\n    role: ctx.role || null, query: ctx.query || null, found: true,\n    staff_id: p.id, fio: fio(p),\n    surname: p.surname || null, firstname: p.firstname || null, patronymic: p.patronymic || null,\n    post: p.post || null,\n    department: dep.title || null,\n    organization: dep.organizationName || null,\n    city: (p.officeItem && p.officeItem.town) || null,\n    office: (p.officeItem && p.officeItem.title) || null,\n    email: p.email || null, login: p.login || null, status: p.status || null,\n    source: ctx.source || null\n  } };\n});\n"
-      },
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        1728,
-        240
-      ],
-      "id": "94c3cda2-a073-4534-b696-fe27a1fba1b2",
-      "name": "Профили: собрать ответ"
-    },
-    {
-      "parameters": {
-        "operation": "executeQuery",
-        "query": "CREATE TABLE IF NOT EXISTS hr_disciplinary_assistant.staff_users (\n  staff_id BIGINT PRIMARY KEY,\n  sid TEXT, login TEXT, email TEXT,\n  firstname TEXT, surname TEXT, patronymic TEXT,\n  post TEXT, town TEXT,\n  office_id BIGINT, office_title TEXT,\n  inner_phone TEXT, mobile_phone TEXT,\n  status_id INT, status TEXT,\n  birthday TEXT, photo_path TEXT,\n  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()\n);\nCREATE INDEX IF NOT EXISTS idx_staff_users_email_lower ON hr_disciplinary_assistant.staff_users (lower(email));\nCREATE INDEX IF NOT EXISTS idx_staff_users_login_lower ON hr_disciplinary_assistant.staff_users (lower(login));",
-        "options": {}
-      },
-      "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2.6,
-      "position": [
-        -736,
-        560
-      ],
-      "id": "d5000000-0000-4000-8000-000000000000",
-      "name": "PG: init staff_users (раз)",
-      "credentials": {
-        "postgres": {
-          "id": "31G0c3e8sLXWZIif",
-          "name": "n8n_hr_disciplinary_assistant"
-        }
-      }
-    },
-    {
-      "parameters": {
-        "content": "## Контракт инструмента (v4)\n### ВХОД (passthrough, любое подмножество полей)\n- subject / manager / witness1 / witness2 / witness3 — email или логин Стаффа; пустые = \"\"\n\n### ВЫХОД — массив, item на каждого НАЙДЕННОГО:\n```\n{ role, query, found, staff_id, fio, surname, firstname, patronymic,\n  post, department, organization, city, office, email, login, status, source }\n```\n- кого не нашли — в ответе НЕТ (агент трактует как not_found)\n- профиль не отдался → item { role, query, found:false, error: \"staff_error: ...\" }",
-        "height": 380,
-        "width": 460
+        "content": "### Шаг 2. Идентификация сотрудника (ДО сбора остальных данных)\nПрежде чем собирать факты — точно определи, о ком речь.\n1. Попроси у руководителя **email или логин в Стаффе** сотрудника-нарушителя (например ivanov@skbkontur.ru или ivanov). Объясни: «Чтобы не перепутать сотрудника (бывают однофамильцы), пришлите его рабочую почту или логин в Стаффе».\n2. Вызови инструмент `Идентификация пользователя`, передав `subject` = почта/логин нарушителя, а в `witnesses` — ФИО свидетелей через «;» (когда они уже названы; на этом шаге можно оставить пустым). Руководитель (автор) определяется автоматически.\n3. Инструмент вернёт данные из Стаффа: по нарушителю — точное совпадение (`subject.match`) или список кандидатов (`subject.candidates`); по свидетелям — кандидаты.\n   - Если пришёл `match` — покажи руководителю ФИО, должность, подразделение, город/офис и спроси: «Это он? Подтвердите».\n   - Если пришёл список `candidates` — перечисли варианты и попроси выбрать нужного.\n   - Если ничего не найдено — попроси уточнить почту/логин.\n4. Данные подтверждённого сотрудника (ФИО, должность, подразделение, город) используй дальше — не переспрашивай их заново.",
+        "height": 384,
+        "width": 864,
+        "color": 4
       },
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "position": [
-        -1264,
-        96
+        -1664,
+        192
       ],
       "id": "25c45613-f405-46a7-abf8-1eefb1e49dca",
       "name": "Sticky Note7"
-    },
-    {
-      "parameters": {
-        "content": "## Поток (v4)\nTrigger → Токен → PG SELECT staff_users → Поиск (item на человека)\n→ IF Найден в кэше? (per-item)\n   TRUE  → Слить ветки (вход 1)\n   FALSE → Собрать отсутствующих (1 item)\n           → Стафф: ВСЕ (view=light, пагинация)\n           → пакет для SQL → PG батч-upsert (jsonb_to_recordset)\n           → Отобрать нужных → Слить ветки (вход 2)\n→ Слить ветки (append) → профиль /api/Users/{id} → Профили: собрать ответ\n\nКэш — Postgres hr_disciplinary_assistant.staff_users (батч одним запросом).\nPG: init staff_users — дёрнуть один раз при разворачивании.",
-        "height": 340,
-        "width": 460
-      },
-      "type": "n8n-nodes-base.stickyNote",
-      "typeVersion": 1,
-      "position": [
-        -1264,
-        500
-      ],
-      "id": "d676f1a1-8f97-41b9-88c6-cc4b170d9843",
-      "name": "Sticky Note6"
-    },
-    {
-      "parameters": {
-        "content": "Стафф API:\nGET /api/Users?view=light&$top=2000&$skip=N — список (id, email, login, ФИО, post, officeItem, status)\nGET /api/Users/{id} — полный профиль (+departmentItems: отдел, организация)\nAuthorization: Bearer JWT из Паспорта.\n⚠️ view=large НЕ содержит id/email на верхнем уровне — для кэша только light!",
-        "height": 220,
-        "width": 380
-      },
-      "type": "n8n-nodes-base.stickyNote",
-      "typeVersion": 1,
-      "position": [
-        528,
-        704
-      ],
-      "id": "ef0a6b08-dee7-4524-bec5-2f7b6eebe69e",
-      "name": "Sticky Note2"
-    },
-    {
-      "parameters": {
-        "content": "## Приложение в Паспорте\nSherpaRPAapp: ClientId + ClientSecret\nhttps://passport.skbkontur.ru/apps/manage/SherpaHROrdersAPP\nAuthorization: Basic base64(clientId:clientSecret)",
-        "height": 180,
-        "width": 380
-      },
-      "type": "n8n-nodes-base.stickyNote",
-      "typeVersion": 1,
-      "position": [
-        -512,
-        60
-      ],
-      "id": "fe29876a-18bf-4cee-964a-e319eaeb2d0d",
-      "name": "Sticky Note3"
     }
   ],
   "pinData": {
     "When Executed by Another Workflow": [
       {
         "json": {
+          "query": {
+            "subject": "port@skbkontur.ru",
+            "manager": "o.kluev@skbkontur.ru",
+            "witness1": "",
+            "witness2": "",
+            "witness3": ""
+          },
           "subject": "port@skbkontur.ru",
           "manager": "o.kluev@skbkontur.ru",
           "witness1": "",
@@ -401,22 +359,11 @@
         ]
       ]
     },
-    "Ранее сохраненные пользователи": {
+    "Обращение в Стафф. Получение данных по всем": {
       "main": [
         [
           {
-            "node": "Поиск нужных по массиву",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Поиск нужных по массиву": {
-      "main": [
-        [
-          {
-            "node": "Найден в кэше?",
+            "node": "Стафф: пакет для SQL",
             "type": "main",
             "index": 0
           }
@@ -427,7 +374,7 @@
       "main": [
         [
           {
-            "node": "Слить ветки",
+            "node": "Поиск данных по конкретным пользователям",
             "type": "main",
             "index": 0
           }
@@ -452,11 +399,22 @@
         ]
       ]
     },
-    "Обращение в Стафф. Получение данных по всем": {
+    "Отобрать нужных": {
       "main": [
         [
           {
-            "node": "Стафф: пакет для SQL",
+            "node": "Поиск данных по конкретным пользователям",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ранее сохраненные пользователи": {
+      "main": [
+        [
+          {
+            "node": "Поиск нужных по массиву",
             "type": "main",
             "index": 0
           }
@@ -474,33 +432,11 @@
         ]
       ]
     },
-    "Сохранить в кэш": {
+    "Поиск нужных по массиву": {
       "main": [
         [
           {
-            "node": "Отобрать нужных",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Отобрать нужных": {
-      "main": [
-        [
-          {
-            "node": "Слить ветки",
-            "type": "main",
-            "index": 1
-          }
-        ]
-      ]
-    },
-    "Слить ветки": {
-      "main": [
-        [
-          {
-            "node": "Поиск данных по конкретным пользователям",
+            "node": "Найден в кэше?",
             "type": "main",
             "index": 0
           }
@@ -517,6 +453,17 @@
           }
         ]
       ]
+    },
+    "Сохранить в кэш": {
+      "main": [
+        [
+          {
+            "node": "Отобрать нужных",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
   "active": true,
@@ -524,7 +471,7 @@
     "executionOrder": "v1",
     "binaryMode": "separate"
   },
-  "versionId": "1594a3a3-4eef-4f19-9832-8c01e1b7dc88",
+  "versionId": "506c5a9d-1051-4de1-ae15-6b64f73304c9",
   "meta": {
     "instanceId": "b3d36343f45620c725ef3c6f9f9a245602756137b7380d1eea459f0cd49f51da"
   },

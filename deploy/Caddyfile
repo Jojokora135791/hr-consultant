@@ -1,5 +1,0 @@
-# Caddy: reverse-proxy на n8n + автоматический HTTPS (Let's Encrypt) по домену.
-# {$DOMAIN} берётся из переменной окружения контейнера caddy.
-{$DOMAIN} {
-	reverse_proxy n8n:5678
-}

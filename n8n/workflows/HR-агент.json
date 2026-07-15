@@ -10,44 +10,9 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1632,
-        656
+        1776,
+        544
       ]
-    },
-    {
-      "parameters": {
-        "conditions": {
-          "options": {
-            "caseSensitive": true,
-            "leftValue": "",
-            "typeValidation": "strict",
-            "version": 2
-          },
-          "conditions": [
-            {
-              "id": "photo-present",
-              "leftValue": "={{ $json.evidence.has_photo }}",
-              "rightValue": "",
-              "operator": {
-                "type": "boolean",
-                "operation": "true",
-                "singleValue": true
-              }
-            }
-          ],
-          "combinator": "and"
-        },
-        "options": {}
-      },
-      "id": "3be7795d-949b-4ae8-95ee-a790aaa041a4",
-      "name": "Есть фото?",
-      "type": "n8n-nodes-base.if",
-      "typeVersion": 2.2,
-      "position": [
-        1792,
-        352
-      ],
-      "disabled": true
     },
     {
       "parameters": {
@@ -84,7 +49,7 @@
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "position": [
-        384,
+        592,
         352
       ]
     },
@@ -97,30 +62,11 @@
       "type": "@n8n/n8n-nodes-langchain.toolCode",
       "typeVersion": 1,
       "position": [
-        2176,
-        944
+        2160,
+        928
       ],
       "id": "f9bfce97-10d6-4ff8-ab0f-d03798178cc0",
       "name": "Рассчитать сроки ст.1"
-    },
-    {
-      "parameters": {
-        "promptType": "define",
-        "text": "={{ $('Нормализация входа TG').item.json.normalized_text }}",
-        "options": {
-          "systemMessage": "Ты — HR-ассистент для руководителей компании Контур. Помогаешь оформить дисциплинарные документы (акт об отсутствии, служебная записка).\n\n## Жёсткие рамки (отладочная версия)\nСейчас тебе доступны ТОЛЬКО Шаги 1–4 (ниже). Ничего сверх них не делай: не собирай факты о нарушении сверх дат из Шага 4 (время, место, доказательства и т.п.), не генерируй документы, не вызывай никакие инструменты, кроме `Идентификация пользователя` и `calc_deadlines`. Когда Шаг 4 завершён — напиши соответствующее финальное сообщение (см. Шаг 4) и остановись.\n\n## Твоя роль\n- Задаёшь вопросы и фиксируешь ответы — ничего не додумываешь сам.\n- Не выдумывай себе возможности: умеешь ровно то, что описано в этом промпте.\n- Общение — личные сообщения в Mattermost. Пиши кратко, дружелюбно и по делу.\n\n## Шаг 1. Приветствие и знакомство\nНа первое сообщение руководителя ответь так:\n1) Поздоровайся и представься: ассистент по дисциплинарным нарушениям.\n2) Расскажи, что умеешь: помогаю руководителю пройти путь от описания ситуации до готового пакета документов — акта об отсутствии и служебной записки; подскажу, какие данные нужны, и правильно их зафиксирую; готовый пакет передаётся экспертам кадрового учёта. Сейчас полностью поддержан сценарий «Прогул (очный)» — сотрудник с офисным режимом работы не вышел на работу; остальные сценарии в разработке.\n3) Попроси: «Расскажите своими словами, что произошло».\nБольше ничего в этом сообщении не спрашивай.\n\n## Шаг 2. Определение сценария\nВыслушай описание ситуации и определи сценарий:\n- Очный прогул (сотрудник, работающий из офиса, не вышел на работу / отсутствовал на рабочем месте) → скажи, что это поддержанный сценарий «Прогул (очный)», и переходи к Шагу 3.\n- Любая другая ситуация (удалённый сотрудник, опоздание, опьянение, разглашение и т.п.) → честно скажи: «С таким случаем пока не умею работать. Обратитесь, пожалуйста, к экспертам кадрового учёта — Касмыниной О. или Черепановой Т.» — и остановись.\n- Если из описания непонятно (не ясно, офисный ли сотрудник или в чём нарушение) — задай уточняющий вопрос. Не угадывай сценарий.\n\n## Шаг 3. Идентификация участников\n1) Зафиксируй участников из рассказа: сотрудник-нарушитель; руководитель — автор документов (обычно тот, кто тебе пишет); свидетели, если руководитель их уже упомянул.\n2) Попроси рабочие почты (или логины в Стаффе) всех известных участников — каждую с новой строки, с подписью, кто есть кто. Пример:\n«сотрудник: ivanov@skbkontur.ru\nруководитель: petrov@skbkontur.ru»\n3) Получив почты, вызови инструмент `Идентификация пользователя` ОДИН раз, заполнив поля:\n- subject — почта/логин сотрудника-нарушителя;\n- manager — почта/логин руководителя;\n- witness1, witness2, witness3 — почты/логины свидетелей, если они уже известны.\nПоля, по которым данных нет, передавай пустой строкой. Когда появляются новые участники или исправленные почты — вызывай инструмент повторно, заполняя только новые/исправленные поля (остальные пустыми).\n\n4) Разбор ответа инструмента. Ответ — массив, по одному объекту на найденного участника, поля:\n{ role, query, found, staff_id, fio, surname, firstname, patronymic, post, department, organization, city, office, email, login, status, source }\n- Кто есть кто, определяй по role (subject / manager / witness1..witness3). Если role пуст — сопоставь по email или login с той почтой/логином, которые ты передавал.\n- found=true → зафиксируй у себя ПОЛНЫЙ набор полей участника: staff_id, fio, post, department, organization, city, office, email. Эти данные — источник истины: дальше используй их без переспрашивания, именно они пойдут в документы на следующих шагах.\n- Участника, которого ты передавал, НЕТ в ответе (или у него found=false без пояснений) → в Стаффе его не нашли: попроси руководителя перепроверить почту/логин этого человека и повтори вызов только по этому полю.\n- error начинается со \"staff_error\" → Стафф временно недоступен: скажи об этом прямо и предложи повторить позже.\n- status участника учитывай справочно: если status не \"recruited\" (например \"dismissed\"), обрати внимание руководителя на это при подтверждении.\n\n5) Когда все известные участники определены — покажи одним сообщением:\n«Проверьте, всё ли верно:\n👤 Сотрудник: <fio>, <post>, <department>, <organization>, <city> (<office>)\n👤 Руководитель (автор документов): <fio>, <post>, <department>, <organization>, <city> (<office>)\n👤 Свидетели: <...> (если были)\nВерно? (да/нет)»\nЕсли «нет» — уточни, чья почта неверна, и повтори вызов только по этому полю.\nПосле «да» — переходи к Шагу 4.\n\n## Шаг 4. Проверка сроков ст.193\n1) Спроси у руководителя дату нарушения (когда сотрудник не вышел на работу / отсутствовал) и, если она отличается, дату обнаружения (когда факт был зафиксирован руководителем). Отвечать можно свободно: «вчера», «в прошлый вторник», «2026-07-01», «на прошлой неделе в пятницу» — сам даты НЕ переводи и НЕ считай, это делает инструмент `calc_deadlines`.\n2) Вызови `calc_deadlines` ОДИН раз со строкой вида \"violationDate=<как сказал руководитель>; discoveryDate=<как сказал руководитель>\". Если руководитель назвал только одну дату (нарушение = обнаружение) — передай только violationDate.\n3) Разбор ответа:\n- Поле \"error\" → инструмент не понял дату. Попроси руководителя переформулировать точнее (например: «вчера», «в прошлый вторник» или в формате ДД.ММ.ГГГГ) и вызови инструмент снова.\n- isExpired=true → сообщи причину (expiredReason \"violation_date\" — истёк буферный срок 5 мес. 15 дн. с даты нарушения; \"discovery_date\" — истёк буферный срок 20 дн. с даты обнаружения) и дедлайны (violationDeadline / discoveryDeadline). Направь руководителя к экспертам кадрового учёта — Касмыниной О. или Черепановой Т. Оформление не продолжается. Останавливайся здесь.\n- isExpired=false → сообщи руководителю разобранные даты (violationDate, discoveryDate) и что сроки не истекли, финальное сообщение: «Сроки проверены, не истекли ✅. Следующие шаги ассистента пока в разработке.» — и остановись.\n\n## Правила\n- Один вопрос за раз.\n- Данные участников бери только из инструмента, не со слов руководителя.\n- Даты и сроки не считай сам — только через `calc_deadlines`.\n- Если чего-то не знаешь — скажи прямо."
-        }
-      },
-      "id": "5ed13e5e-f274-42df-9780-913aae31477e",
-      "name": "HR-ассистент",
-      "type": "@n8n/n8n-nodes-langchain.agent",
-      "typeVersion": 1.7,
-      "position": [
-        1888,
-        656
-      ],
-      "retryOnFail": true,
-      "maxTries": 5
     },
     {
       "parameters": {
@@ -129,8 +75,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        2240,
-        656
+        2304,
+        544
       ],
       "id": "45fef4f2-e8d2-451c-a809-72d5c6a5fca9",
       "name": "Code in JavaScript"
@@ -190,154 +136,17 @@
       "type": "@n8n/n8n-nodes-langchain.toolWorkflow",
       "typeVersion": 1.3,
       "position": [
-        2288,
-        864
+        2400,
+        880
       ]
-    },
-    {
-      "parameters": {
-        "jsCode": "const prev = $('Нормализация входа TG').first().json;\nconst buf = await this.helpers.getBinaryDataBuffer(0, 'data');\nreturn [{ json: {\n  chat_id: prev.chat_id,\n  file_id: prev.evidence.file_id,\n  file_size: prev.evidence.file_size,\n  downloaded: true,\n  note: 'telegram photo',\n  file_b64: buf.toString('base64'),\n  normalized_text: prev.normalized_text\n} }];"
-      },
-      "id": "5a4416bf-219b-4eff-a145-eb3aafde8b1f",
-      "name": "Кодировать фото (base64)",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        1488,
-        352
-      ],
-      "disabled": true
-    },
-    {
-      "parameters": {
-        "schema": {
-          "__rl": true,
-          "value": "hr_disciplinary_assistant",
-          "mode": "list",
-          "cachedResultName": "hr_disciplinary_assistant"
-        },
-        "table": {
-          "__rl": true,
-          "value": "hr_evidence",
-          "mode": "list"
-        },
-        "columns": {
-          "mappingMode": "defineBelow",
-          "value": {
-            "chat_id": "={{ $json.chat_id }}",
-            "file_id": "={{ $json.file_id }}",
-            "file_size": "={{ $json.file_size }}",
-            "downloaded": "={{ $json.downloaded }}",
-            "note": "={{ $json.note }}",
-            "file_b64": "={{ $json.file_b64 }}"
-          },
-          "matchingColumns": [
-            "id"
-          ],
-          "schema": [
-            {
-              "id": "id",
-              "displayName": "id",
-              "required": false,
-              "defaultMatch": true,
-              "display": true,
-              "type": "number",
-              "canBeUsedToMatch": true,
-              "removed": true
-            },
-            {
-              "id": "chat_id",
-              "displayName": "chat_id",
-              "required": true,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "canBeUsedToMatch": true
-            },
-            {
-              "id": "created_at",
-              "displayName": "created_at",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "dateTime",
-              "canBeUsedToMatch": true,
-              "removed": false
-            },
-            {
-              "id": "file_id",
-              "displayName": "file_id",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "canBeUsedToMatch": true
-            },
-            {
-              "id": "file_size",
-              "displayName": "file_size",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "number",
-              "canBeUsedToMatch": true
-            },
-            {
-              "id": "downloaded",
-              "displayName": "downloaded",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "boolean",
-              "canBeUsedToMatch": true
-            },
-            {
-              "id": "note",
-              "displayName": "note",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "canBeUsedToMatch": true
-            },
-            {
-              "id": "file_b64",
-              "displayName": "file_b64",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "canBeUsedToMatch": true
-            }
-          ],
-          "attemptToConvertTypes": false,
-          "convertFieldsToString": false
-        },
-        "options": {}
-      },
-      "id": "315b0c9c-5a25-4474-928a-1dd1333cf431",
-      "name": "Postgres: запись доказательства",
-      "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2.6,
-      "position": [
-        1648,
-        352
-      ],
-      "credentials": {
-        "postgres": {
-          "id": "31G0c3e8sLXWZIif",
-          "name": "n8n_hr_disciplinary_assistant"
-        }
-      },
-      "disabled": true
     },
     {
       "parameters": {
         "model": {
           "__rl": true,
-          "value": "code-pro",
+          "value": "preview-code-pro",
           "mode": "list",
-          "cachedResultName": "code-pro"
+          "cachedResultName": "preview-code-pro"
         },
         "responsesApiEnabled": false,
         "options": {}
@@ -359,6 +168,84 @@
     },
     {
       "parameters": {
+        "method": "POST",
+        "url": "https://chat.skbkontur.ru/api/v4/posts",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBearerAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ channel_id: $json.chat_id, message: $json.text }) }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        2496,
+        544
+      ],
+      "id": "7b4e1983-10a5-49dc-8f3f-ddf9d305f91c",
+      "name": "Отправить сообщение",
+      "credentials": {
+        "httpBearerAuth": {
+          "id": "xtnxUI9OKeXEHJCS",
+          "name": "Контур. Mattermost"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "mattermost-in",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        1568,
+        544
+      ],
+      "id": "9cde33ae-e19c-4799-8331-70a0929b8072",
+      "name": "Webhook",
+      "webhookId": "9fe3bbf1-d64f-4dc5-8b95-b7592d44e300"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $('Нормализация входа TG').item.json.normalized_text }}",
+        "options": {
+          "systemMessage": "Ты — HR-ассистент для руководителей компании Контур. Помогаешь оформить дисциплинарные документы (акт об отсутствии, служебная записка).\n\n## Жёсткие рамки (отладочная версия)\nСейчас тебе доступны Шаги 1–7 (ниже) — полный цикл до генерации документов включительно. Не вызывай никакие инструменты, кроме `Идентификация пользователя`, `calc_deadlines`, `scenario_checklist`, `generate_documents` и `Think`. Не додумывай данные, которых руководитель не называл, — только факты из диалога и инструментов.\n\n## Твоя роль\n- Задаёшь вопросы и фиксируешь ответы — ничего не додумываешь сам.\n- Не выдумывай себе возможности: умеешь ровно то, что описано в этом промпте.\n- Общение — личные сообщения в Mattermost. Пиши кратко, дружелюбно и по делу.\n\n## Шаг 1. Приветствие и знакомство\nНа первое сообщение руководителя ответь так:\n1) Поздоровайся и представься: ассистент по дисциплинарным нарушениям.\n2) Расскажи, что умеешь: помогаю руководителю пройти путь от описания ситуации до готового пакета документов — акта об отсутствии и служебной записки; подскажу, какие данные нужны, и правильно их зафиксирую; готовый пакет передаётся экспертам кадрового учёта. Сейчас полностью поддержан сценарий «Прогул (очный)» — сотрудник с офисным режимом работы не вышел на работу; остальные сценарии в разработке.\n3) Попроси: «Расскажите своими словами, что произошло».\nБольше ничего в этом сообщении не спрашивай.\n\n## Шаг 2. Определение сценария\nВыслушай описание ситуации и определи сценарий:\n- Очный прогул (сотрудник, работающий из офиса, не вышел на работу / отсутствовал на рабочем месте) → скажи, что это поддержанный сценарий «Прогул (очный)». Внутренний идентификатор этого сценария — ровно `progul_ochny` (скопируй эту строку посимвольно, не переписывай по памяти) — используй её БЕЗ ИЗМЕНЕНИЙ во всех дальнейших вызовах инструментов (`scenario_checklist`, `generate_documents`), где нужно поле scenario. Переходи к Шагу 3.\n- Любая другая ситуация (удалённый сотрудник, опоздание, опьянение, разглашение и т.п.) → честно скажи: «С таким случаем пока не умею работать. Обратитесь, пожалуйста, к экспертам кадрового учёта — Касмыниной О. или Черепановой Т.» — и остановись.\n- Если из описания непонятно (не ясно, офисный ли сотрудник или в чём нарушение) — задай уточняющий вопрос. Не угадывай сценарий.\n\n## Шаг 3. Идентификация участников\n1) Зафиксируй участников из рассказа: сотрудник-нарушитель; руководитель — автор документов (обычно тот, кто тебе пишет); свидетели, если руководитель их уже упомянул.\n2) Попроси рабочие почты (или логины в Стаффе) всех известных участников — каждую с новой строки, с подписью, кто есть кто. Пример:\n«сотрудник: ivanov@skbkontur.ru\nруководитель: petrov@skbkontur.ru»\n3) Получив почты, вызови инструмент `Идентификация пользователя` ОДИН раз, заполнив поля:\n- subject — почта/логин сотрудника-нарушителя;\n- manager — почта/логин руководителя;\n- witness1, witness2, witness3 — почты/логины свидетелей, если они уже известны.\nПоля, по которым данных нет, передавай пустой строкой. Когда появляются новые участники или исправленные почты — вызывай инструмент повторно, заполняя только новые/исправленные поля (остальные пустыми).\n\n4) Разбор ответа инструмента. Ответ — массив, по одному объекту на найденного участника, поля:\n{ role, query, found, staff_id, fio, surname, firstname, patronymic, post, department, organization, city, office, email, login, status, source }\n- Кто есть кто, определяй по role (subject / manager / witness1..witness3). Если role пуст — сопоставь по email или login с той почтой/логином, которые ты передавал.\n- found=true → зафиксируй у себя ПОЛНЫЙ набор полей участника: staff_id, fio, post, department, organization, city, office, email. Эти данные — источник истины: дальше используй их без переспрашивания, именно они пойдут в документы на следующих шагах.\n- Участника, которого ты передавал, НЕТ в ответе (или у него found=false без пояснений) → в Стаффе его не нашли: попроси руководителя перепроверить почту/логин этого человека и повтори вызов только по этому полю.\n- error начинается со \"staff_error\" → Стафф временно недоступен: скажи об этом прямо и предложи повторить позже.\n- status участника учитывай справочно: если status не \"recruited\" (например \"dismissed\"), обрати внимание руководителя на это при подтверждении.\n\n5) Когда все известные участники определены — покажи одним сообщением:\n«Проверьте, всё ли верно:\n👤 Сотрудник: <fio>, <post>, <department>, <organization>, <city> (<office>)\n👤 Руководитель (автор документов): <fio>, <post>, <department>, <organization>, <city> (<office>)\n👤 Свидетели: <...> (если были)\nВерно? (да/нет)»\nЕсли «нет» — уточни, чья почта неверна, и повтори вызов только по этому полю.\nПосле «да» — вызови `Think` и явно продумай: соответствует ли режим работы сотрудника (поля city/office/явные упоминания удалённой работы из ответа Стаффа) сценарию «Прогул очный» — сотрудник должен быть офисным. Если есть противоречие (например, сотрудник помечен как удалённый/home office) — не молчи, скажи об этом руководителю и уточни, прежде чем продолжать. Если противоречий нет — переходи к Шагу 4.\n\n## Шаг 4. Проверка сроков ст.193\n1) Спроси у руководителя дату нарушения (когда сотрудник не вышел на работу / отсутствовал) и, если она отличается, дату обнаружения (когда факт был зафиксирован руководителем). Отвечать можно свободно: «вчера», «в прошлый вторник», «2026-07-01», «на прошлой неделе в пятницу» — сам даты НЕ переводи и НЕ считай, это делает инструмент `calc_deadlines`.\n2) Вызови `calc_deadlines` ОДИН раз со строкой вида \"violationDate=<как сказал руководитель>; discoveryDate=<как сказал руководитель>\". Если руководитель назвал только одну дату (нарушение = обнаружение) — передай только violationDate.\n3) Разбор ответа:\n- Поле \"error\" → инструмент не понял дату. Попроси руководителя переформулировать точнее (например: «вчера», «в прошлый вторник» или в формате ДД.ММ.ГГГГ) и вызови инструмент снова.\n- isExpired=true → сообщи причину (expiredReason \"violation_date\" — истёк буферный срок 5 мес. 15 дн. с даты нарушения; \"discovery_date\" — истёк буферный срок 20 дн. с даты обнаружения) и дедлайны (violationDeadline / discoveryDeadline). Направь руководителя к экспертам кадрового учёта — Касмыниной О. или Черепановой Т. Оформление не продолжается. Останавливайся здесь.\n- isExpired=false → сообщи руководителю разобранные даты (violationDate, discoveryDate) и что сроки не истекли, и переходи к Шагу 5.\n\n## Шаг 5. Чек-лист обязательных действий\n1) Вызови `scenario_checklist` с полем scenario (тем же, что определил на Шаге 2), поле answers оставь пустым — получишь checklist_content (текст чек-листа).\n2) Если checklist_content начинается с \"[ошибка\" — чек-лист временно недоступен: скажи об этом руководителю прямо, предложи повторить позже, и остановись. Ничего не выдумывай вместо содержимого чек-листа.\n3) Разбор текста чек-листа. Чек-лист обычно описывает ВЕСЬ процесс оформления нарушения целиком, но тебе из него нужна только часть.\n   ЖЁСТКОЕ ПРАВИЛО ИСКЛЮЧЕНИЯ (без исключений, применяй механически). Если в пункте чек-листа упоминается любое из этого — акт об отсутствии, служебная записка, служебная проверка, подписание/подписать, передача документов/передать экспертам, дисциплинарное взыскание, требование о предоставлении объяснения — этот пункт ВСЕГДА выбрасывай целиком и вообще не упоминай его руководителю, независимо от точной формулировки. Эти вещи означают документы и действия, которые генерируешь и оформляешь дальше ТЫ САМ (Шаги 6+, генерация документов ассистентом) — руководитель их делать не должен и не может, потому что этих документов физически ещё не существует.\n   Из оставшихся пунктов (после исключения по правилу выше) задай руководителю вопросами (да/нет, по одному) те, что описывают действия САМОГО руководителя ДО обращения к тебе — например: связаться с сотрудником (звонок, почта, соцсети, родственники), проверить в кадровых системах/Стаффе статус сотрудника (отпуск/командировка/больничный), уведомить отдел кадрового учёта о факте неявки.\n   Если после применения правила исключения не осталось пунктов совсем — переходи сразу к финальному сообщению Шага 5 без вопросов.\n4) Когда руководитель ответил по всем отобранным пунктам — собери ответы в массив вида [{\"item\":\"текст пункта дословно из чек-листа\",\"done\":true/false,\"comment\":\"...\"}] и вызови `scenario_checklist` повторно, теперь заполнив answers этим массивом (scenario передай тот же).\n5) После успешного сохранения (saved=true) — вызови `Think` и продумай: не появилось ли в ответах руководителя по чек-листу чего-то, что ставит под сомнение сам сценарий целиком (например, «сотрудник был в отпуске/на больничном» — это меняет всю картину, а не просто пункт чек-листа). Если есть сомнение — озвучь его руководителю и уточни. Если всё чисто — переходи к Шагу 6.\n\n## Шаг 6. Сбор недостающих фактов о нарушении\nЧасть данных уже известна — не спрашивай её заново:\n- ФИО/должность/подразделение сотрудника, руководителя, свидетелей — из ответа `Идентификация пользователя` (Шаг 3). Поле `fio` → используешь как `name`, поле `post` → как `position`.\n- Город и адрес рабочего места сотрудника — тоже из `Идентификация пользователя` (поля `city`, `office` того же сотрудника).\n- Попытки связи с сотрудником (contactAttempts) — это ответ руководителя на пункт чек-листа про связь с сотрудником (Шаг 5). Возьми его из истории диалога, не спрашивай второй раз.\n\nСпроси только то, чего реально не хватает (по одному вопросу):\n1) Время начала и окончания отсутствия (весь рабочий день — тогда стандартные часы; если частичное — конкретное время).\n2) Была ли уважительная причина отсутствия? Если да — попроси коротко описать (respectableReasonComment).\n3) Какие есть доказательства/подтверждения отсутствия (текстовое описание; приём фото пока не поддержан).\n\n## Шаг 7. Подтверждение и генерация документов\n1) Прежде чем показывать сводку, вызови `Think` и явно пройдись по каждому полю, нужному для `generate_documents`: что реально заполнено, что осталось без данных, верно ли смапплены fio→name и post→position у сотрудника/руководителя, не больше ли двух свидетелей в списке. Затем покажи руководителю одним сообщением сводку всех данных, которые пойдут в документы: сотрудник, руководитель, свидетели (ФИО+должность), город/адрес, дата и время отсутствия, дата обнаружения, попытки связи, уважительная причина, доказательства. Спроси «Верно? (да/нет)».\n2) Если «нет» — уточни, что поправить, и вернись к нужному шагу.\n3) После «да» — вызови `generate_documents` ОДИН раз со следующими полями (используй ИМЕННО эти ключи и форму):\n   - scenario — как определил на Шаге 2.\n   - employee — { name, position, department } сотрудника (name = его fio, position = его post).\n   - manager — { name, position, department } руководителя (те же правила маппинга).\n   - workplace — { city, address } из данных сотрудника в Стаффе.\n   - witnesses — массив из НЕ БОЛЕЕ ДВУХ свидетелей: [{ name, position }, ...]. Если свидетелей больше двух — передай только первых двух, про остальных ничего не говори (шаблон документа поддерживает только двух).\n   - violation — { date, discoveryDate, absenceStart, absenceEnd }: date и discoveryDate — те самые даты из ответа `calc_deadlines` (Шаг 4), НЕ переспрашивай их заново.\n   - respectableReason — true/false.\n   - respectableReasonComment — текст (если respectableReason=false, можно оставить пустым).\n   - evidenceDescription — текст.\n   - contactAttempts — текст (взят из чек-листа, Шаг 5).\n4) Разбор ответа: если пришла ошибка — сообщи руководителю прямо, что генерация не удалась, и предложи повторить позже (не выдумывай, что документы готовы). Если успех — сообщи, что документы сформированы и отправлены, и остановись.\n\n## Правила\n- Один вопрос за раз.\n- Данные участников бери только из инструмента, не со слов руководителя.\n- Даты и сроки не считай сам — только через `calc_deadlines`.\n- Содержимое чек-листа бери только из инструмента `scenario_checklist`, не придумывай пункты сам.\n- Если чего-то не знаешь — скажи прямо."
+        }
+      },
+      "id": "3a483122-e4e2-4106-ae62-af217bded7c4",
+      "name": "HR-ассистент",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.7,
+      "position": [
+        1968,
+        544
+      ],
+      "retryOnFail": true,
+      "maxTries": 5
+    },
+    {
+      "parameters": {
+        "content": "-- посмотреть, где лежит история и сколько её\nSELECT count(*) FROM hr_disciplinary_assistant.n8n_chat_histories\nWHERE session_id = 'obga3gxqt7yeipg8ecuj46dbye';\n\n-- стереть историю твоей лички с ботом\nDELETE FROM hr_disciplinary_assistant.n8n_chat_histories\nWHERE session_id = 'obga3gxqt7yeipg8ecuj46dbye';",
+        "height": 352,
+        "width": 432
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        16,
+        1408
+      ],
+      "id": "fb716a48-3acc-4f20-90d6-7aee98f291cd",
+      "name": "Sticky Note"
+    },
+    {
+      "parameters": {
+        "description": "Идентификация участников кейса в Стаффе Контура. Передай email или логин каждого ИЗВЕСТНОГО участника в его поле: subject (сотрудник-нарушитель), manager (руководитель — автор документов), witness1/witness2/witness3 (свидетели). Поля без данных передавай пустой строкой. Заполнено может быть любое подмножество полей — от одного до всех пяти. Инструмент можно вызывать повторно по мере появления новых участников или исправленных почт. По каждому переданному участнику возвращает: found + user {staff_id, fio, post, department, organization, city, office, email} либо error (not_found / ambiguous + candidates[] / staff_error).",
         "workflowId": {
           "__rl": true,
           "value": "hiqVFsh1xvLn3460",
@@ -425,167 +312,87 @@
           ],
           "attemptToConvertTypes": false,
           "convertFieldsToString": true
-        },
-        "description": "Идентификация участников кейса в Стаффе Контура. Передай email или логин каждого ИЗВЕСТНОГО участника в его поле: subject (сотрудник-нарушитель), manager (руководитель — автор документов), witness1/witness2/witness3 (свидетели). Поля без данных передавай пустой строкой. Заполнено может быть любое подмножество полей. Можно вызывать повторно. Возвращает массив по найденным: { role, query, found, staff_id, fio, post, department, organization, city, office, email, login, status }. Кого не нашли — в ответе нет."
+        }
       },
       "type": "@n8n/n8n-nodes-langchain.toolWorkflow",
       "typeVersion": 2.2,
       "position": [
         2048,
-        864
+        784
       ],
-      "id": "37128830-75b3-4534-9987-c1964d0efcbc",
+      "id": "6ee371f6-03a2-45ac-bdaa-b55d9ffbad0e",
       "name": "Идентификация пользователя"
     },
     {
       "parameters": {
-        "resource": "file",
-        "fileId": "={{ $('Нормализация входа TG').first().json.evidence.file_id }}",
-        "additionalFields": {}
-      },
-      "id": "f7483191-f345-40b2-81cc-658e7c8dc3b6",
-      "name": "Telegram: скачать фото?????",
-      "type": "n8n-nodes-base.telegram",
-      "typeVersion": 1.2,
-      "position": [
-        1344,
-        352
-      ],
-      "webhookId": "e9febf60-8646-40b0-920c-516d71aa7244",
-      "disabled": true
-    },
-    {
-      "parameters": {
-        "method": "POST",
-        "url": "https://chat.skbkontur.ru/api/v4/posts",
-        "authentication": "genericCredentialType",
-        "genericAuthType": "httpBearerAuth",
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ channel_id: $json.chat_id, message: $json.text }) }}",
-        "options": {}
-      },
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.3,
-      "position": [
-        2432,
-        656
-      ],
-      "id": "7b4e1983-10a5-49dc-8f3f-ddf9d305f91c",
-      "name": "Отправить сообщение",
-      "credentials": {
-        "httpBearerAuth": {
-          "id": "xtnxUI9OKeXEHJCS",
-          "name": "Контур. Mattermost"
+        "description": "Работа с чек-листом обязательных действий перед оформлением по сценарию. Два режима по наличию answers: (1) БЕЗ answers — вернёт текст чек-листа (checklist_content) для указанного scenario, ничего не сохраняет; (2) С answers (JSON-массив [{item, done, comment}]) — сохранит ответы руководителя в базу и вернёт {saved:true, count}. Сначала вызови в режиме (1), покажи чек-лист руководителю и собери ответы по каждому пункту, затем вызови в режиме (2) с собранными ответами.",
+        "workflowId": {
+          "__rl": true,
+          "value": "20MGv8Ejg6s6JT12",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/20MGv8Ejg6s6JT12",
+          "cachedResultName": "scenario_checklist"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "scenario": "={{ $fromAI('scenario', 'сценарий нарушения, определённый на Шаге 2 (сейчас только progul_ochny); передавай без изменений в обоих режимах вызова', 'string') }}",
+            "chat_id": "={{ $('Нормализация входа TG').first().json.chat_id }}",
+            "answers": "={{ $fromAI('answers', 'JSON-массив ответов руководителя по пунктам чек-листа вида [{\"item\":\"текст пункта из чек-листа\",\"done\":true,\"comment\":\"опционально\"}, ...]. Передавай ТОЛЬКО когда руководитель уже ответил на ВСЕ пункты чек-листа — иначе оставь поле пустым, чтобы получить сам текст чек-листа', 'string') }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "scenario",
+              "displayName": "scenario",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "chat_id",
+              "displayName": "chat_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "answers",
+              "displayName": "answers",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
         }
       },
-      "onError": "continueErrorOutput"
-    },
-    {
-      "parameters": {
-        "httpMethod": "POST",
-        "path": "mattermost-in",
-        "options": {}
-      },
-      "type": "n8n-nodes-base.webhook",
-      "typeVersion": 2.1,
+      "type": "@n8n/n8n-nodes-langchain.toolWorkflow",
+      "typeVersion": 2.2,
       "position": [
-        1408,
-        656
+        2272,
+        784
       ],
-      "id": "9cde33ae-e19c-4799-8331-70a0929b8072",
-      "name": "Webhook",
-      "webhookId": "9fe3bbf1-d64f-4dc5-8b95-b7592d44e300"
+      "id": "b88d9fca-5ef8-46c3-a23c-bfe4f34a6ae2",
+      "name": "scenario_checklist"
     },
     {
       "parameters": {},
-      "type": "n8n-nodes-base.manualTrigger",
-      "typeVersion": 1,
+      "type": "@n8n/n8n-nodes-langchain.toolThink",
+      "typeVersion": 1.1,
       "position": [
-        384,
-        1216
+        2528,
+        784
       ],
-      "id": "2d8a227f-dbb8-480a-946f-eca8514f8757",
-      "name": "When clicking ‘Execute workflow’"
-    },
-    {
-      "parameters": {
-        "operation": "executeQuery",
-        "query": "CREATE TABLE IF NOT EXISTS hr_disciplinary_assistant.hr_cases (\n  id SERIAL PRIMARY KEY,\n  chat_id TEXT NOT NULL,\n  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),\n  manager_name TEXT,\n  employee_name TEXT,\n  department TEXT,\n  scenario TEXT,\n  violation_date DATE,\n  discovery_date DATE,\n  is_expired BOOLEAN,\n  docs_generated BOOLEAN DEFAULT FALSE,\n  raw_data JSONB\n);\nCREATE INDEX IF NOT EXISTS idx_hr_cases_chat_id ON hr_disciplinary_assistant.hr_cases (chat_id);\nCREATE INDEX IF NOT EXISTS idx_hr_cases_created_at ON hr_disciplinary_assistant.hr_cases (created_at);",
-        "options": {}
-      },
-      "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2.6,
-      "position": [
-        864,
-        1216
-      ],
-      "id": "69bdecd0-ced2-4a9a-a66a-7d467834bf19",
-      "name": "2. Таблица hr_cases",
-      "credentials": {
-        "postgres": {
-          "id": "31G0c3e8sLXWZIif",
-          "name": "n8n_hr_disciplinary_assistant"
-        }
-      }
-    },
-    {
-      "parameters": {
-        "operation": "executeQuery",
-        "query": "CREATE TABLE IF NOT EXISTS hr_disciplinary_assistant.hr_evidence (\n  id SERIAL PRIMARY KEY,\n  chat_id TEXT NOT NULL,\n  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),\n  file_id TEXT,\n  file_size BIGINT,\n  downloaded BOOLEAN DEFAULT FALSE,\n  note TEXT,\n  file_b64 TEXT\n);\nCREATE INDEX IF NOT EXISTS idx_hr_evidence_chat_id ON hr_disciplinary_assistant.hr_evidence (chat_id);",
-        "options": {}
-      },
-      "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2.6,
-      "position": [
-        1104,
-        1216
-      ],
-      "id": "384855c2-c4ee-4935-8240-01e386ae9ea4",
-      "name": "3. Таблица hr_evidence",
-      "credentials": {
-        "postgres": {
-          "id": "31G0c3e8sLXWZIif",
-          "name": "n8n_hr_disciplinary_assistant"
-        }
-      }
-    },
-    {
-      "parameters": {
-        "content": "## Инициализация Postgres (схема hr_disciplinary_assistant)\n\nСхему создавать НЕ нужно — DBA её уже создал. Здесь только:\n0. search_path (ALTER ROLE) — чтобы неквалифицированные таблицы (память диалога) шли в нашу схему\n2. Таблица hr_cases\n3. Таблица hr_evidence\n\nCred: n8n_hr_disciplinary_assistant. Все CREATE — IF NOT EXISTS, безопасно повторять.\nЕсли ловишь pg_hba (плавающие IP подов) — запускай повторно, пока не пройдёт (фикс у DBA).",
-        "height": 260,
-        "width": 420,
-        "color": 4
-      },
-      "type": "n8n-nodes-base.stickyNote",
-      "typeVersion": 1,
-      "position": [
-        384,
-        912
-      ],
-      "id": "056d16c6-e1f3-48c0-8afc-5d324b2b9dc4",
-      "name": "Инструкция"
-    },
-    {
-      "parameters": {
-        "operation": "executeQuery",
-        "query": "ALTER ROLE hr_disciplinary_assistant_user SET search_path = hr_disciplinary_assistant, public;",
-        "options": {}
-      },
-      "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2.6,
-      "position": [
-        592,
-        1216
-      ],
-      "id": "e03cf958-51ee-4d56-b090-11a7debfc191",
-      "name": "0. search_path",
-      "credentials": {
-        "postgres": {
-          "id": "31G0c3e8sLXWZIif",
-          "name": "n8n_hr_disciplinary_assistant"
-        }
-      }
+      "id": "16938498-e24c-42a4-9e40-9a66873c1397",
+      "name": "Think"
     }
   ],
   "pinData": {
@@ -668,17 +475,6 @@
         ]
       ]
     },
-    "HR-ассистент": {
-      "main": [
-        [
-          {
-            "node": "Code in JavaScript",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
     "Code in JavaScript": {
       "main": [
         [
@@ -712,17 +508,6 @@
         ]
       ]
     },
-    "Идентификация пользователя": {
-      "ai_tool": [
-        [
-          {
-            "node": "HR-ассистент",
-            "type": "ai_tool",
-            "index": 0
-          }
-        ]
-      ]
-    },
     "Webhook": {
       "main": [
         [
@@ -734,34 +519,45 @@
         ]
       ]
     },
-    "When clicking ‘Execute workflow’": {
+    "HR-ассистент": {
       "main": [
         [
           {
-            "node": "0. search_path",
+            "node": "Code in JavaScript",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "2. Таблица hr_cases": {
-      "main": [
+    "Идентификация пользователя": {
+      "ai_tool": [
         [
           {
-            "node": "3. Таблица hr_evidence",
-            "type": "main",
+            "node": "HR-ассистент",
+            "type": "ai_tool",
             "index": 0
           }
         ]
       ]
     },
-    "0. search_path": {
-      "main": [
+    "scenario_checklist": {
+      "ai_tool": [
         [
           {
-            "node": "2. Таблица hr_cases",
-            "type": "main",
+            "node": "HR-ассистент",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Think": {
+      "ai_tool": [
+        [
+          {
+            "node": "HR-ассистент",
+            "type": "ai_tool",
             "index": 0
           }
         ]
@@ -773,7 +569,7 @@
     "executionOrder": "v1",
     "binaryMode": "separate"
   },
-  "versionId": "8f16e9b2-222f-4918-a2d4-8787a162ddc2",
+  "versionId": "20398c5a-8244-486a-906c-af42b9717b42",
   "meta": {
     "instanceId": "b3d36343f45620c725ef3c6f9f9a245602756137b7380d1eea459f0cd49f51da"
   },

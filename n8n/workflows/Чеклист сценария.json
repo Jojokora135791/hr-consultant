@@ -1,0 +1,311 @@
+{
+  "name": "scenario_checklist",
+  "nodes": [
+    {
+      "parameters": {
+        "inputSource": "passthrough"
+      },
+      "id": "60789d02-00ba-40ca-8955-a0600edfebab",
+      "name": "Вызов из агента",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        688,
+        -656
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $input.first().json || {};\nlet data = raw;\nif (raw.query && typeof raw.query === 'object' && !Array.isArray(raw.query)) {\n  data = raw.query;\n} else if (typeof raw.query === 'string') {\n  try { data = JSON.parse(raw.query); } catch (e) { data = raw; }\n}\n\nconst scenario = String(data.scenario || raw.scenario || '').trim();\nconst chat_id = String(data.chat_id || raw.chat_id || '').trim();\nlet answers = data.answers ?? raw.answers ?? null;\nif (typeof answers === 'string' && answers.trim()) {\n  try { answers = JSON.parse(answers); } catch (e) {\n    throw new Error('checklist: не смог разобрать answers как JSON-массив. Получено: ' + answers);\n  }\n}\nif (!Array.isArray(answers) || answers.length === 0) answers = null;\n\nif (!scenario) throw new Error('checklist: не передан scenario.');\nif (answers && !chat_id) throw new Error('checklist: для записи ответов нужен chat_id.');\n\nreturn [{ json: {\n  scenario,\n  chat_id,\n  answers,\n  answers_json: answers ? JSON.stringify(answers) : null,\n  hasAnswers: !!answers\n} }];"
+      },
+      "id": "a7616878-802d-4c69-936a-497e8450027c",
+      "name": "Нормализовать вход",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        944,
+        -608
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "cond-has-answers",
+              "leftValue": "={{ $json.hasAnswers }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "c4c851a9-236a-41f4-9ab4-ff9036082d99",
+      "name": "Есть ответы?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1184,
+        -608
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH up AS (\n  INSERT INTO hr_disciplinary_assistant.hr_checklist_answers AS a\n    (chat_id, scenario, item, done, comment, updated_at)\n  SELECT $2::text, $3::text, r.item, r.done, r.comment, now()\n  FROM jsonb_to_recordset($1::jsonb) AS r(item TEXT, done BOOLEAN, comment TEXT)\n  ON CONFLICT (chat_id, item) DO UPDATE SET\n    scenario = EXCLUDED.scenario,\n    done = EXCLUDED.done,\n    comment = EXCLUDED.comment,\n    updated_at = now()\n  RETURNING 1\n)\nSELECT count(*)::int AS saved FROM up;",
+        "options": {
+          "queryReplacement": "={{ [$json.answers_json, $json.chat_id, $json.scenario] }}"
+        }
+      },
+      "id": "b89e9dee-94ab-4d62-80ec-0bf130d2db72",
+      "name": "Записать ответы",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1424,
+        -720
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "31G0c3e8sLXWZIif",
+          "name": "n8n_hr_disciplinary_assistant"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const saved = $input.first().json.saved || 0;\nreturn [{ json: { saved: true, count: saved } }];"
+      },
+      "id": "2a1dc234-a837-4a84-b0fc-102f148b4085",
+      "name": "Ответ: сохранено",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1664,
+        -720
+      ]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 1
+                },
+                "conditions": [
+                  {
+                    "id": "cond-progul",
+                    "leftValue": "={{ $json.scenario }}",
+                    "rightValue": "progul_ochny",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "progul_ochny"
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra"
+        }
+      },
+      "id": "3171ed73-811f-46d8-98cf-cd5951b80ed4",
+      "name": "Выбор сценария",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [
+        1424,
+        -512
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "serviceAccount",
+        "operation": "download",
+        "fileId": {
+          "__rl": true,
+          "value": "1IYZLJHvULOYyhubz9qamm88K9P3qvkVKA5vvU80N2QM",
+          "mode": "list",
+          "cachedResultName": "Прогул",
+          "cachedResultUrl": "https://docs.google.com/document/d/1IYZLJHvULOYyhubz9qamm88K9P3qvkVKA5vvU80N2QM/edit?usp=drivesdk"
+        },
+        "options": {
+          "binaryPropertyName": "data",
+          "googleFileConversion": {
+            "conversion": {
+              "docsToFormat": "text/plain"
+            }
+          },
+          "fileName": "progul_checklist.txt"
+        }
+      },
+      "id": "b8a95506-817a-446e-8007-e872ea1abff7",
+      "name": "Drive: скачать чеклист",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        1664,
+        -576
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1500,
+      "credentials": {
+        "googleApi": {
+          "id": "R25HHyTFIZLB7DA2",
+          "name": "hr_disciplinary_assistant"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Чеклист подгружается ДИНАМИЧЕСКИ из Google Drive (нода «Drive: скачать чеклист»).\n// Источник правды: knowledge/progul_checklist.md → выгружен в Google Drive\n// (fileId 1AkZ9oCM6EzNHewmEiwqvERmq9cKDMt0V). Команда правит чеклист прямо в Drive.\n// Требует n8n с NODE_FUNCTION_ALLOW_EXTERNAL=adm-zip,petrovich (см. CLAUDE.md).\nconst AdmZip = require('adm-zip');\nlet checklist_content = '[чеклист не загружен из Drive]';\ntry {\n  const buf = await this.helpers.getBinaryDataBuffer(0, 'data');\n  if (buf && buf.length) {\n    if (buf[0] === 0x50 && buf[1] === 0x4B) {\n      const zip = new AdmZip(buf);\n      const xml = zip.readAsText('word/document.xml');\n      checklist_content = xml.replace(/<\\/w:p>/g, '\\n').replace(/<[^>]+>/g, '').replace(/[ \\t]+/g, ' ').trim();\n    } else {\n      checklist_content = buf.toString('utf8').replace(/^\\uFEFF/, '').trim();\n    }\n  }\n} catch (e) {\n  checklist_content = '[ошибка загрузки чеклиста из Drive: ' + e.message + ']';\n}\n\nconst d = $('Нормализовать вход').first().json;\n// Какие документы нужны для сценария — костыль-карта (меняется редко, зашита прямо здесь).\nconst DOC_MAP = {\n  progul_ochny: { нужен_акт: true, нужна_сз: true },\n};\nconst docs = DOC_MAP[d.scenario] || { нужен_акт: false, нужна_сз: false };\n\nreturn [{ json: { scenario: d.scenario, checklist_content, нужен_акт: docs.нужен_акт, нужна_сз: docs.нужна_сз } }];\n"
+      },
+      "id": "33056c1d-69c5-46d4-8e92-adc95144f889",
+      "name": "Прочитать чеклист",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1904,
+        -576
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const d = $('Нормализовать вход').first().json;\nconst DOC_MAP = {\n  progul_ochny: { нужен_акт: true, нужна_сз: true },\n};\nconst docs = DOC_MAP[d.scenario] || { нужен_акт: false, нужна_сз: false };\n\nreturn [{ json: {\n  scenario: d.scenario,\n  checklist_content: `[Чеклист для сценария \"${d.scenario}\" пока не готов]`,\n  нужен_акт: docs.нужен_акт,\n  нужна_сз: docs.нужна_сз\n} }];"
+      },
+      "id": "0b0381a2-07d8-44fd-9b1f-01aaf6744540",
+      "name": "Сценарий: заглушка",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1664,
+        -416
+      ]
+    }
+  ],
+  "pinData": {
+    "Вызов из агента": [
+      {
+        "json": {
+          "scenario": "opyanenie"
+        }
+      }
+    ]
+  },
+  "connections": {
+    "Вызов из агента": {
+      "main": [
+        [
+          {
+            "node": "Нормализовать вход",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Нормализовать вход": {
+      "main": [
+        [
+          {
+            "node": "Есть ответы?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Есть ответы?": {
+      "main": [
+        [
+          {
+            "node": "Записать ответы",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Выбор сценария",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Записать ответы": {
+      "main": [
+        [
+          {
+            "node": "Ответ: сохранено",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Выбор сценария": {
+      "main": [
+        [
+          {
+            "node": "Drive: скачать чеклист",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Сценарий: заглушка",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Drive: скачать чеклист": {
+      "main": [
+        [
+          {
+            "node": "Прочитать чеклист",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "d3534237-0d55-4d21-aa5d-123e79133348",
+  "meta": {
+    "instanceId": "b3d36343f45620c725ef3c6f9f9a245602756137b7380d1eea459f0cd49f51da"
+  },
+  "id": "20MGv8Ejg6s6JT12",
+  "tags": []
+}
